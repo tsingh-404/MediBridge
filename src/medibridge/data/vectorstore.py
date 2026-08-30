@@ -24,12 +24,21 @@ def _embedding_fn() -> OpenAIEmbeddingFunction:
     )
 
 
+_CLIENT: chromadb.PersistentClient | None = None
+
+
 def get_client() -> chromadb.PersistentClient:
-    CHROMA_DIR.mkdir(parents=True, exist_ok=True)
-    return chromadb.PersistentClient(
-        path=str(CHROMA_DIR),
-        settings=ChromaSettings(anonymized_telemetry=False),
-    )
+    # Cache one client per process. Re-creating PersistentClient on the same
+    # path (esp. concurrently, e.g. under eval) triggers chromadb's
+    # "RustBindingsAPI object has no attribute 'bindings'" / tenant errors.
+    global _CLIENT
+    if _CLIENT is None:
+        CHROMA_DIR.mkdir(parents=True, exist_ok=True)
+        _CLIENT = chromadb.PersistentClient(
+            path=str(CHROMA_DIR),
+            settings=ChromaSettings(anonymized_telemetry=False),
+        )
+    return _CLIENT
 
 
 def get_or_create_collection(client: chromadb.PersistentClient, name: str):

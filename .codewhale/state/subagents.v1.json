@@ -1,0 +1,63 @@
+{
+  "schema_version": 1,
+  "snapshot_sequence": 103,
+  "agents": [],
+  "coordination": {
+    "schema_version": 1,
+    "sequence": 6,
+    "decisions": [],
+    "write_claims": [],
+    "reconciliations": [],
+    "projections": [
+      {
+        "child_id": "agent_2f67ebc3",
+        "decision_ids": [],
+        "projected_bytes": 0,
+        "deduplicated": 0,
+        "omitted": 0,
+        "sequence": 1
+      },
+      {
+        "child_id": "agent_76fa58fd",
+        "decision_ids": [],
+        "projected_bytes": 0,
+        "deduplicated": 0,
+        "omitted": 0,
+        "sequence": 2
+      },
+      {
+        "child_id": "agent_29c3a99a",
+        "decision_ids": [],
+        "projected_bytes": 0,
+        "deduplicated": 0,
+        "omitted": 0,
+        "sequence": 3
+      },
+      {
+        "child_id": "agent_dccd93ce",
+        "decision_ids": [],
+        "projected_bytes": 0,
+        "deduplicated": 0,
+        "omitted": 0,
+        "sequence": 4
+      },
+      {
+        "child_id": "agent_f18d8dd5",
+        "decision_ids": [],
+        "projected_bytes": 0,
+        "deduplicated": 0,
+        "omitted": 0,
+        "sequence": 5
+      },
+      {
+        "child_id": "agent_6238e991",
+        "decision_ids": [],
+        "projected_bytes": 0,
+        "deduplicated": 0,
+        "omitted": 0,
+        "sequence": 6
+      }
+    ],
+    "contentions": []
+  }
+}

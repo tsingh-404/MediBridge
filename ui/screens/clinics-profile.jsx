@@ -172,6 +172,8 @@ function Clinics() {
 
 function Profile({ profile, onReset }) {
   const [confirmingReset, setConfirmingReset] = useState(false);
+
+  useBackHandler(confirmingReset, () => setConfirmingReset(false));
   const initials = (profile.insurer?.name || 'S').split(/\s+/).slice(0, 2).map(s => s[0]).join('').toUpperCase();
   const start = new Date(profile.date);
   const elapsedMonths = Math.max((Date.now() - start.getTime()) / (1000 * 60 * 60 * 24 * 30.4375), 0);
@@ -244,6 +246,8 @@ function Profile({ profile, onReset }) {
             </div>
           )}
         </Section>
+
+        <Disclaimer style={{ marginBottom: 14 }} />
       </div>
     </div>
   );

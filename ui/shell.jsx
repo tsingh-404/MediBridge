@@ -17,8 +17,67 @@ const Icon = {
   back: (p={}) => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" {...p}><path d="M15 19l-7-7 7-7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>,
 };
 
+// ─────────── Native hooks (no-ops on the web build) ───────────
+
+// Register an Android back-button handler while `active` is true. The stack in
+// native.js is last-in-first-served, so a nested view registered after the root
+// handler gets the press first.
+function useBackHandler(active, fn) {
+  useEffect(() => {
+    if (!active || !window.MBNative) return;
+    return window.MBNative.pushBackHandler(fn);
+  }, [active, fn]);
+}
+
+function useKeyboardOpen() {
+  const [open, setOpen] = useState(false);
+  useEffect(() => (window.MBNative ? window.MBNative.onKeyboard(setOpen) : undefined), []);
+  return open;
+}
+
+function useOnline() {
+  const [online, setOnline] = useState(true);
+  useEffect(() => (window.MBNative ? window.MBNative.onNetwork(setOnline) : undefined), []);
+  return online;
+}
+
+// ─────────── Offline banner ───────────
+function OfflineBanner() {
+  const online = useOnline();
+  if (online) return null;
+  return (
+    <div style={{
+      position: 'absolute', top: 'env(safe-area-inset-top, 0px)', left: 0, right: 0, zIndex: 40,
+      background: MB.badSoft, borderBottom: `1px solid ${MB.border}`,
+      color: MB.ink, fontFamily: MB.sans, fontSize: 12.5, fontWeight: 550,
+      padding: '8px 14px', textAlign: 'center',
+    }}>
+      No connection — showing the app offline. Answers and lookups need the network.
+    </div>
+  );
+}
+
+// ─────────── Disclaimer ───────────
+// MediBridge is informational only; this needs to be visible in the app itself,
+// not just the README.
+function Disclaimer({ style }) {
+  return (
+    <div style={{
+      fontFamily: MB.sans, fontSize: 11.5, lineHeight: 1.45, color: MB.inkSubtle,
+      background: MB.surfaceMuted, border: `1px solid ${MB.border}`,
+      borderRadius: MB.r1, padding: '8px 10px', ...style,
+    }}>
+      Informational only — MediBridge is not financial or medical advice. Confirm
+      cover and costs with your insurer and provider before acting.
+    </div>
+  );
+}
+
 // ─────────── Bottom nav ───────────
 function BottomNav({ active, onChange }) {
+  // Hidden while the on-screen keyboard is up, so the composer keeps the space.
+  const keyboardOpen = useKeyboardOpen();
+  if (keyboardOpen) return null;
   const items = [
     { id: 'chat', label: 'Ask', I: Icon.chat },
     { id: 'calc', label: 'Costs', I: Icon.calc },
@@ -173,4 +232,7 @@ function calcCoverage(item, tier, setting, clinicFee) {
   return { benefit, gap, pct, fee };
 }
 
-Object.assign(window, { Icon, BottomNav, Header, Tag, Button, fmtAUD });
+Object.assign(window, {
+  Icon, BottomNav, Header, Tag, Button, fmtAUD,
+  useBackHandler, useKeyboardOpen, useOnline, OfflineBanner, Disclaimer,
+});

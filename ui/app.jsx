@@ -14,10 +14,20 @@ function App() {
     return () => { alive = false; };
   }, []);
 
+  // Hand the native splash over to the app's own loading state once we've
+  // painted something real.
+  useEffect(() => {
+    if (loaded && window.MBNative) window.MBNative.hideSplash();
+  }, [loaded]);
+
+  // Android back on a non-root tab returns to chat; on chat the stack is empty
+  // and native.js lets the press exit the app.
+  useBackHandler(screen !== 'chat', () => setScreen('chat'));
+
   if (!loaded) {
     return (
       <div style={{
-        height: '100dvh', background: MB.bg, display: 'flex',
+        height: '100%', minHeight: '100dvh', background: MB.bg, display: 'flex',
         alignItems: 'center', justifyContent: 'center', flexDirection: 'column',
         gap: 10,
       }}>
@@ -37,7 +47,8 @@ function App() {
 
   if (!profile) {
     return (
-      <div style={{ height: '100dvh', background: MB.bg }}>
+      <div style={{ height: '100%', minHeight: '100dvh', background: MB.bg, position: 'relative' }}>
+        <OfflineBanner />
         <Onboarding onDone={(p) => { setProfile(p); setScreen('chat'); }} />
       </div>
     );
@@ -49,7 +60,8 @@ function App() {
   };
 
   return (
-    <div style={{ height: '100dvh', position: 'relative', background: MB.bg, overflow: 'hidden' }}>
+    <div style={{ height: '100%', minHeight: '100dvh', position: 'relative', background: MB.bg, overflow: 'hidden' }}>
+      <OfflineBanner />
       <div style={{ position: 'absolute', inset: 0, paddingTop: 'env(safe-area-inset-top, 0px)' }}>
         <div key={screen} style={{ height: '100%', animation: `slideIn ${MB.durationFast} ${MB.ease}` }}>
           {screen === 'chat' && <Chat profile={profile} />}

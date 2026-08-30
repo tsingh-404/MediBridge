@@ -22,6 +22,10 @@ dependencies = [
     "sse-starlette>=2.1",
 ]
 
+[project.optional-dependencies]
+# pip install -e ".[eval]"  — LangSmith eval harness (evals/, run via: python -m evals.run_eval)
+eval = ["langsmith>=0.1.100"]
+
 [project.scripts]
 medibridge = "medibridge.server.main:run"
 medibridge-cli = "medibridge.cli:main"

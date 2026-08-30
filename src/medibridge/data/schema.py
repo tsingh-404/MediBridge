@@ -129,6 +129,9 @@ CREATE TABLE IF NOT EXISTS insurer_waiting_periods (
 
 CREATE TABLE IF NOT EXISTS user_profile (
     id INTEGER PRIMARY KEY DEFAULT 1,
+    -- NULL = the shared/legacy profile used by the CLI and the desktop web app.
+    -- Non-NULL = one row per mobile install, keyed by the X-MB-Device header.
+    device_id TEXT,
     tier_id TEXT NOT NULL,
     cover_type TEXT NOT NULL,
     policy_start_date TEXT NOT NULL,
@@ -171,4 +174,6 @@ CREATE INDEX IF NOT EXISTS idx_imap_btos ON imap_mappings(btos_code);
 CREATE INDEX IF NOT EXISTS idx_coverage_type ON oshc_coverage_rules(rule_type);
 CREATE INDEX IF NOT EXISTS idx_clinics_postcode ON clinics(postcode);
 CREATE INDEX IF NOT EXISTS idx_clinics_suburb ON clinics(suburb);
+-- SQLite treats NULLs as distinct, so this constrains device rows only.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_user_profile_device ON user_profile(device_id);
 """

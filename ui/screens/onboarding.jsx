@@ -18,6 +18,8 @@ function Onboarding({ onDone }) {
   const total = 5;
   const next = () => setStep(s => Math.min(s + 1, total - 1));
   const back = () => setStep(s => Math.max(s - 1, 0));
+
+  useBackHandler(step > 0, back);
   const finish = async () => {
     setSaving(true);
     setSaveErr(null);
@@ -198,6 +200,7 @@ function Onboarding({ onDone }) {
         )}
       </div>
 
+      <Disclaimer style={{ margin: '0 20px 12px' }} />
       <div style={{ padding: '16px 20px calc(env(safe-area-inset-bottom, 0px) + 20px)', display: 'flex', gap: 10, borderTop: `1px solid ${MB.border}`, background: MB.surface }}>
         {step > 0 && <Button kind="secondary" onClick={back}>Back</Button>}
         {step < total - 1 ? (

@@ -83,7 +83,7 @@ The repository does **not** include government source files. Before ingestion, c
 | `knowledge/insurers/` | Per-insurer markdown (and comparisons if present) |
 | `knowledge/reference/` | Additional reference markdown for rules embedding |
 
-Place **`data/sources/clinics_qld.db`** in the repo so clinic ingestion can run; if missing, ingest continues and prints a skip message.
+Place **`data/sources/clinics_qld.csv`** in the repo so clinic ingestion can run; if missing, ingest continues and prints a skip message. The CSV is repaired during ingest (postcodes recovered from the address tail, duplicate listings merged into comma-joined `type` values).
 
 Generated artifacts (`data/medibridge.db`, `data/chroma/`, profile JSON) are gitignored.
 

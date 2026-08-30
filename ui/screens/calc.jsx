@@ -1,6 +1,9 @@
 // Cost Calculator — multi-item bill backed by real MBS catalogue + /api/coverage.
 function CostCalc({ profile }) {
   const [view, setView] = useState('list');
+
+  // Registered after App's tab handler, so back closes search first.
+  useBackHandler(view === 'search', () => setView('list'));
   const [items, setItems] = useState([]); // each: server item + uid + setting + coverage{benefit,pct,notes,is_covered}
   const [totalCharge, setTotalCharge] = useState(null);
   const [query, setQuery] = useState('');

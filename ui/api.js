@@ -1,11 +1,38 @@
 // MediBridge frontend ↔ FastAPI client.
-// Same-origin fetch (frontend is mounted by uvicorn at /). All paths relative.
+// Web: same-origin (uvicorn mounts the SPA at /). Mobile: MB_CONFIG.apiBase points
+// at the deployed API, so every request becomes cross-origin — see the CORS
+// middleware in src/medibridge/server/main.py.
 
 (function () {
+  const API_BASE = (window.MB_CONFIG && window.MB_CONFIG.apiBase) || '';
+
+  // Per-install identity. Not auth — just a stable opaque id so each device gets
+  // its own profile row instead of everyone sharing user_profile id=1.
+  // Requests without this header fall back to the legacy shared profile.
+  let _deviceId = null;
+  function deviceId() {
+    if (_deviceId) return _deviceId;
+    try { _deviceId = localStorage.getItem('mb_device_id'); } catch {}
+    if (!_deviceId) {
+      _deviceId = (window.crypto && crypto.randomUUID)
+        ? crypto.randomUUID()
+        : 'mb-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10);
+      // May throw in a WebView with site data blocked; the id then lasts one session.
+      try { localStorage.setItem('mb_device_id', _deviceId); } catch {}
+    }
+    return _deviceId;
+  }
+
+  function headers(json) {
+    const h = { 'X-MB-Device': deviceId() };
+    if (json) h['Content-Type'] = 'application/json';
+    return h;
+  }
+
   async function _request(method, path, body) {
-    const res = await fetch(path, {
+    const res = await fetch(API_BASE + path, {
       method,
-      headers: body !== undefined ? { 'Content-Type': 'application/json' } : undefined,
+      headers: headers(body !== undefined),
       body: body !== undefined ? JSON.stringify(body) : undefined,
     });
     if (res.status === 204) return null;
@@ -29,13 +56,25 @@
   }
 
   // SSE over POST: parse `event:` / `data:` framed lines from a streaming response body.
-  async function chatStream({ message, history }, callbacks) {
+  // Deliberately fetch + ReadableStream, not EventSource (GET-only) and not
+  // CapacitorHttp (its native fetch buffers the whole body and breaks streaming).
+  // `signal` lets the UI cancel a run; an abort resolves quietly, without onError.
+  async function chatStream({ message, history, signal }, callbacks) {
     const { onToolCall, onToolResult, onMessage, onDone, onError } = callbacks || {};
-    const res = await fetch('/api/chat', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Accept': 'text/event-stream' },
-      body: JSON.stringify({ message, history: history || [] }),
-    });
+    const aborted = () => signal && signal.aborted;
+    let res;
+    try {
+      res = await fetch(API_BASE + '/api/chat', {
+        method: 'POST',
+        headers: { ...headers(true), 'Accept': 'text/event-stream' },
+        body: JSON.stringify({ message, history: history || [] }),
+        signal,
+      });
+    } catch (e) {
+      if (e && e.name === 'AbortError') return;
+      onError && onError(e);
+      throw e;
+    }
     if (!res.ok || !res.body) {
       const err = new Error(`Chat HTTP ${res.status}`);
       onError && onError(err);
@@ -61,7 +100,14 @@
     };
 
     while (true) {
-      const { value, done } = await reader.read();
+      let value, done;
+      try {
+        ({ value, done } = await reader.read());
+      } catch (e) {
+        if (aborted() || (e && e.name === 'AbortError')) return;
+        onError && onError(e);
+        return;
+      }
       if (done) break;
       buf += decoder.decode(value, { stream: true });
       let idx;

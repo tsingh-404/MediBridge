@@ -9,3 +9,14 @@ build/
 dist/
 .claude/
 graphify-out/
+
+# Mobile (Capacitor)
+node_modules/
+mobile/www/
+mobile/ios/App/Pods/
+mobile/ios/App/build/
+mobile/ios/DerivedData/
+mobile/android/.gradle/
+mobile/android/local.properties
+mobile/android/.idea/
+mobile/android/captures/

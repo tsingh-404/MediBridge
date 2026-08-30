@@ -6,6 +6,15 @@ function Chat({ profile }) {
   const [showJump, setShowJump] = useState(false);
   const scrollRef = useRef(null);
   const historyRef = useRef([]);
+  const abortRef = useRef(null);
+  // BottomNav hides itself while the keyboard is open, so the 80px it normally
+  // occupies must come back off the composer padding.
+  const keyboardOpen = useKeyboardOpen();
+
+  // Cancel any in-flight stream when the screen unmounts (tab switch, back button).
+  useEffect(() => () => { if (abortRef.current) abortRef.current.abort(); }, []);
+
+  const stop = () => { if (abortRef.current) abortRef.current.abort(); };
 
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
@@ -35,6 +44,9 @@ function Chat({ profile }) {
     historyRef.current.push({ role: 'user', content: trimmed });
     setStreaming(true);
 
+    const controller = new AbortController();
+    abortRef.current = controller;
+
     const replacePending = (mut) => {
       setMessages(ms => {
         const out = ms.slice();
@@ -52,7 +64,7 @@ function Chat({ profile }) {
 
     try {
       await api.chatStream(
-        { message: trimmed, history: historySnapshot },
+        { message: trimmed, history: historySnapshot, signal: controller.signal },
         {
           onToolCall: (ev) => replacePending(p => ({
             thinking: [...(p.thinking || []), {
@@ -82,6 +94,10 @@ function Chat({ profile }) {
     } catch (e) {
       // surfaced via onError
     } finally {
+      if (controller.signal.aborted) {
+        replacePending(_ => ({ pending: false, text: pending.text || 'Stopped.' }));
+      }
+      abortRef.current = null;
       setStreaming(false);
     }
   };
@@ -107,7 +123,10 @@ function Chat({ profile }) {
       )}
 
       <div style={{
-        padding: '10px 14px calc(env(safe-area-inset-bottom, 0px) + 80px)', borderTop: `1px solid ${MB.border}`, background: MB.surface,
+        padding: keyboardOpen
+          ? '10px 14px calc(env(safe-area-inset-bottom, 0px) + 10px)'
+          : '10px 14px calc(env(safe-area-inset-bottom, 0px) + 80px)',
+        borderTop: `1px solid ${MB.border}`, background: MB.surface,
       }}>
         <div style={{
           display: 'flex', alignItems: 'flex-end', gap: 8,
@@ -125,13 +144,17 @@ function Chat({ profile }) {
               fontFamily: MB.sans, fontSize: 15, color: MB.ink, padding: '10px 0',
             }}
           />
-          <button onClick={() => send(input)} disabled={streaming || !input.trim()} style={{
-            width: 36, height: 36, borderRadius: 99,
-            background: input.trim() && !streaming ? MB.ink : MB.borderStrong,
-            color: '#fff', border: 'none', cursor: streaming ? 'not-allowed' : 'pointer',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            transition: `background ${MB.durationFast} ${MB.ease}`,
-          }}><Icon.send /></button>
+          <button
+            onClick={() => (streaming ? stop() : send(input))}
+            disabled={!streaming && !input.trim()}
+            aria-label={streaming ? 'Stop generating' : 'Send'}
+            style={{
+              width: 36, height: 36, borderRadius: 99,
+              background: streaming || input.trim() ? MB.ink : MB.borderStrong,
+              color: '#fff', border: 'none', cursor: 'pointer',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              transition: `background ${MB.durationFast} ${MB.ease}`,
+            }}>{streaming ? <Icon.x /> : <Icon.send />}</button>
         </div>
       </div>
     </div>
@@ -142,10 +165,23 @@ function Message({ m, profile, onFollowup }) {
   const renderRich = (raw) => {
     if (!raw) return '';
     let html = raw
+      // inline code & links first so emphasis can't clobber their contents
       .replace(/`([^`]+)`/g, '<code style="font-family:var(--mono,monospace);background:rgba(20,20,20,0.06);padding:1px 4px;border-radius:4px;">$1</code>')
+      .replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1" target="_blank" rel="noreferrer">$1</a>')
+      // bold before italic so the ** pair is consumed first
       .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-      .replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1" target="_blank" rel="noreferrer">$1</a>');
-    html = html.replace(/^- (.+)$/gm, '• $1');
+      .replace(/\*([^*\n]+)\*/g, '<em>$1</em>')
+      .replace(/(^|[\s(])_([^_\n]+)_(?=$|[\s).,!?])/g, '$1<em>$2</em>');
+    // block-level, line-anchored — before newline→<br/>
+    html = html
+      .replace(/^### (.+)$/gm, '<h4 style="margin:10px 0 4px;font-size:14px;font-weight:650;">$1</h4>')
+      .replace(/^## (.+)$/gm, '<h3 style="margin:12px 0 5px;font-size:15.5px;font-weight:700;">$1</h3>')
+      .replace(/^# (.+)$/gm, '<h2 style="margin:14px 0 6px;font-size:17px;font-weight:700;">$1</h2>')
+      .replace(/^\s*(?:---|\*\*\*)\s*$/gm, '<hr style="border:none;border-top:1px solid rgba(20,20,20,0.12);margin:10px 0;"/>')
+      .replace(/^(\d+)\. (.+)$/gm, '<span style="display:inline-block;">$1. $2</span>')
+      .replace(/^- (.+)$/gm, '• $1');
+    // drop the newline that follows a block element to avoid a double gap
+    html = html.replace(/(<\/h[2-4]>|<hr[^>]*\/>)\n/g, '$1');
     return html.replace(/\n/g, '<br/>');
   };
 

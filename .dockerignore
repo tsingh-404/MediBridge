@@ -1,0 +1,24 @@
+# Build context trimming — keep data/ (the pre-built DB + Chroma ship in the image).
+.venv/
+.git/
+.gitignore
+__pycache__/
+**/__pycache__/
+*.pyc
+*.egg-info/
+.pytest_cache/
+
+# Mobile / node
+node_modules/
+mobile/
+
+# Not needed at runtime
+knowledge/
+docs/
+evals/
+tests/
+.claude/
+.codewhale/
+graphify-out/
+data/backups/
+data/user_profile.json

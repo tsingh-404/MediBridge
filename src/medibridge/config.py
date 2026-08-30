@@ -16,7 +16,7 @@ USER_PROFILE_JSON = DATA_DIR / "user_profile.json"
 
 # Read-only seed inputs (third-party datasets dropped here, ingested into DB_PATH)
 SOURCES_DIR = DATA_DIR / "sources"
-CLINICS_SOURCE_PATH = SOURCES_DIR / "clinics_qld.db"
+CLINICS_SOURCE_PATH = SOURCES_DIR / "clinics_qld.csv"
 
 # Raw structured data → SQLite ingest only
 MBS_XML_PATH = KNOWLEDGE_DIR / "data" / "MBS-XML-20260301-version 2.XML"
