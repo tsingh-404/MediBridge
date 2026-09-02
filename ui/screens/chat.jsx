@@ -141,7 +141,7 @@ function Chat({ profile }) {
             disabled={streaming}
             style={{
               flex: 1, background: 'none', border: 'none', outline: 'none',
-              fontFamily: MB.sans, fontSize: 15, color: MB.ink, padding: '10px 0',
+              fontFamily: MB.sans, fontSize: 16, color: MB.ink, padding: '10px 0',
             }}
           />
           <button

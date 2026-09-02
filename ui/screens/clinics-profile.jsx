@@ -70,7 +70,7 @@ function Clinics() {
           <input
             value={q} onChange={e => setQ(e.target.value)}
             placeholder="Suburb or postcode (e.g. 4059)"
-            style={{ flex: 1, background: 'none', border: 'none', outline: 'none', fontFamily: MB.sans, fontSize: 14.5, color: MB.ink }}
+            style={{ flex: 1, background: 'none', border: 'none', outline: 'none', fontFamily: MB.sans, fontSize: 16, color: MB.ink }}
           />
           {q && <button onClick={() => setQ('')} style={{ background: 'none', border: 'none', color: MB.inkSubtle, cursor: 'pointer' }}><Icon.x /></button>}
         </div>
