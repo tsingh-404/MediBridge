@@ -152,12 +152,19 @@ function Onboarding({ onDone }) {
         )}
         {step === 3 && (
           <div>
-            <input type="date" value={date} onChange={e => setDate(e.target.value)} style={{
-              width: '100%', boxSizing: 'border-box',
-              height: 56, padding: '0 16px', borderRadius: 14,
-              border: `1px solid ${MB.border}`, background: MB.surface,
-              fontFamily: MB.sans, fontSize: 17, color: MB.ink, outline: 'none',
-            }} />
+            <div style={{
+              width: '100%', height: 56, boxSizing: 'border-box',
+              borderRadius: 14, border: `1px solid ${MB.border}`,
+              background: MB.surface, overflow: 'hidden',
+              display: 'flex', alignItems: 'center',
+            }}>
+              <input type="date" value={date} onChange={e => setDate(e.target.value)} style={{
+                flex: 1, width: 0, minWidth: 0, height: '100%',
+                boxSizing: 'border-box', border: 'none', background: 'transparent',
+                padding: '0 16px', fontFamily: MB.sans, fontSize: 17,
+                color: MB.ink, outline: 'none', textAlign: 'center',
+              }} />
+            </div>
             <div style={{ marginTop: 12, padding: '12px 14px', background: MB.accentSoft, borderRadius: 10, fontFamily: MB.sans, fontSize: 12.5, color: MB.accentInk, lineHeight: 1.5 }}>
               Most waiting periods are 2 months for hospital, 12 months for pre‑existing conditions and pregnancy. GP visits and ambulance have no wait.
             </div>
