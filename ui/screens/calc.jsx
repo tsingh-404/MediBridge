@@ -121,7 +121,7 @@ function CostCalc({ profile }) {
         <div style={{ padding: '14px 20px 8px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: MB.surface, border: `1px solid ${MB.border}`, borderRadius: 12, padding: '0 14px', height: 46 }}>
             <Icon.search style={{ color: MB.inkSubtle }} />
-            <input autoFocus value={query} onChange={e => setQuery(e.target.value)} placeholder='Try "GP", "specialist consultation", or "23"' style={{ flex: 1, background: 'none', border: 'none', outline: 'none', fontFamily: MB.sans, fontSize: 15, color: MB.ink }} />
+            <input autoFocus value={query} onChange={e => setQuery(e.target.value)} placeholder='Try "GP", "specialist consultation", or "23"' style={{ flex: 1, background: 'none', border: 'none', outline: 'none', fontFamily: MB.sans, fontSize: 16, color: MB.ink }} />
             {query && <button onClick={() => setQuery('')} style={{ background: 'none', border: 'none', color: MB.inkSubtle, cursor: 'pointer' }}><Icon.x /></button>}
           </div>
         </div>
