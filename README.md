@@ -21,7 +21,7 @@ Available via a **Rich terminal CLI**, a **web UI** (static SPA + streaming chat
 
 - **Python 3.11+**
 - **OpenAI API key** — used for chat (`gpt-5-nano`) and embeddings (`text-embedding-3-small`)
-- **For mobile builds:** Node.js 22, JDK 17 and Android Studio for Android, and macOS/Xcode for iOS
+- **For mobile builds:** Node.js 22, JDK 21 and Android Studio for Android, and macOS/Xcode for iOS
 - **Optional:** LangSmith env vars for tracing (see `.env.example`)
 
 ---

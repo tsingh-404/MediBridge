@@ -69,7 +69,7 @@ load-bearing. Adding a file means adding it to `ENTRIES` in
 cd mobile
 MB_API_BASE=https://your-api npm run sync   # build:web -> www/ -> cap sync
 npm run android                             # open Android Studio
-npm run android:apk                         # Windows debug APK (gradlew.bat, needs JDK 17)
+npm run android:apk                         # Windows debug APK (gradlew.bat, needs JDK 21)
 npm run ios                                 # open Xcode
 npm run ios:sim                             # unsigned simulator compile check (macOS/Xcode)
 npm run guard                               # fail on dev-only settings in a release
@@ -170,7 +170,7 @@ Queensland clinic directory (~1,450 rows after repair). Source CSV at `data/sour
 
 - `web-assets`: `npm ci`, `npm run build:web`, then verifies committed `ui/js`, `ui/vendor`, and `ui/fonts` do not drift.
 - `backend`: installs `.[dev]` and runs `python -m pytest tests/ -v`.
-- `android`: Node 22, JDK 17, Android SDK, `npm run guard`, `npm run sync`, then `./gradlew assembleDebug`.
+- `android`: Node 22, JDK 21, Android SDK, `npm run guard`, `npm run sync`, then `./gradlew assembleDebug`.
 - `ios`: Node 22, `npm run guard`, `npm run sync`, then an unsigned simulator `xcodebuild`.
 
 `mobile/capacitor.config.json` must stay production-clean in git. Do not commit `server.url`, `server.cleartext`, or `android.allowMixedContent`; use uncommitted local config changes only for LAN/http debugging.
