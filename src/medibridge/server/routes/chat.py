@@ -1,15 +1,17 @@
 from __future__ import annotations
 
 import json
-from typing import Any, Iterable
+from typing import Annotated, Any, Iterable
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Header, Request
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 from sse_starlette.sse import EventSourceResponse
 
 from medibridge.server.schemas import ChatRequest
 
 router = APIRouter()
+
+DeviceId = Annotated[str | None, Header(alias="X-MB-Device")]
 
 _MAX_RESULT_PREVIEW = 800  # truncate large tool outputs in the SSE trace
 
@@ -56,8 +58,10 @@ def _events_for_message(msg: Any) -> Iterable[dict]:
 
 
 @router.post("/chat")
-async def post_chat(req: ChatRequest, request: Request):
+async def post_chat(req: ChatRequest, request: Request, x_mb_device: DeviceId = None):
     graph = request.app.state.graph
+    # Scopes the system prompt and every profile-aware tool to this install.
+    config = {"configurable": {"device_id": x_mb_device}}
 
     history_msgs = []
     if req.history:
@@ -69,7 +73,9 @@ async def post_chat(req: ChatRequest, request: Request):
 
     def sync_iter():
         try:
-            for update in graph.stream({"messages": history_msgs}, stream_mode="updates"):
+            for update in graph.stream(
+                {"messages": history_msgs}, config=config, stream_mode="updates"
+            ):
                 # update shape: {node_name: {"messages": [<new messages from that node>]}}
                 for _node, payload in update.items():
                     new_msgs = (payload or {}).get("messages") or []

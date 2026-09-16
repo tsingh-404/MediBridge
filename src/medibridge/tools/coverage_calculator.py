@@ -9,10 +9,12 @@ from __future__ import annotations
 
 import sqlite3
 
+from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import tool
 
 from medibridge.data import db as dbmod
 from medibridge.data import queries
+from medibridge.profile import device_from_config, device_scope
 from medibridge.models.coverage import CoverageResult
 
 # Keywords in insurer_exclusion_desc that indicate a service-level exclusion.
@@ -26,11 +28,13 @@ _EXCLUSION_KEYWORDS: dict[str, list[str]] = {
 }
 
 
-def _get_user_tier(conn: sqlite3.Connection) -> dict | None:
+def _get_user_tier(conn: sqlite3.Connection, device_id: str | None = None) -> dict | None:
+    where, params = device_scope(device_id, "p")
     row = conn.execute(
-        """SELECT t.*, p.policy_start_date, p.cover_type
+        f"""SELECT t.*, p.policy_start_date, p.cover_type
            FROM user_profile p JOIN insurer_tiers t ON p.tier_id = t.tier_id
-           WHERE p.id = 1"""
+           WHERE {where}""",
+        params,
     ).fetchone()
     return dict(row) if row else None
 
@@ -91,7 +95,9 @@ def _not_covered(item: dict, reason: str) -> CoverageResult:
     )
 
 
-def _calculate(item_num: str, setting: str, conn: sqlite3.Connection) -> CoverageResult:
+def _calculate(
+    item_num: str, setting: str, conn: sqlite3.Connection, device_id: str | None = None
+) -> CoverageResult:
     item = queries.get_item_by_number(conn, item_num)
     if not item:
         raise ValueError(f"MBS item {item_num} not found")
@@ -130,7 +136,7 @@ def _calculate(item_num: str, setting: str, conn: sqlite3.Connection) -> Coverag
         )
 
     # --- Insurer exclusion check ---
-    tier = _get_user_tier(conn)
+    tier = _get_user_tier(conn, device_id)
     if tier:
         exclusion = _check_insurer_exclusions(item, tier["tier_id"], conn)
         if exclusion:
@@ -186,7 +192,9 @@ def _calculate(item_num: str, setting: str, conn: sqlite3.Connection) -> Coverag
 
 
 @tool
-def calculate_oshc_coverage(item_num: str, setting: str) -> dict:
+def calculate_oshc_coverage(
+    item_num: str, setting: str, config: RunnableConfig = None
+) -> dict:
     """Calculate OSHC coverage for an MBS item.
 
     Args:
@@ -196,6 +204,8 @@ def calculate_oshc_coverage(item_num: str, setting: str) -> dict:
     Returns coverage including is_covered, oshc_benefit, estimated_out_of_pocket, and notes.
     If is_covered=False, the item is not claimable under OSHC — report the reason from notes.
     """
+    # `config` is injected by LangGraph and excluded from the schema shown to the
+    # model; it carries the device id that selects which profile to price against.
     with dbmod.get_conn() as conn:
-        result = _calculate(str(item_num), setting, conn)
+        result = _calculate(str(item_num), setting, conn, device_from_config(config))
     return result.model_dump()

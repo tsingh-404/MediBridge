@@ -70,7 +70,7 @@ function Clinics() {
           <input
             value={q} onChange={e => setQ(e.target.value)}
             placeholder="Suburb or postcode (e.g. 4059)"
-            style={{ flex: 1, background: 'none', border: 'none', outline: 'none', fontFamily: MB.sans, fontSize: 14.5, color: MB.ink }}
+            style={{ flex: 1, background: 'none', border: 'none', outline: 'none', fontFamily: MB.sans, fontSize: 16, color: MB.ink }}
           />
           {q && <button onClick={() => setQ('')} style={{ background: 'none', border: 'none', color: MB.inkSubtle, cursor: 'pointer' }}><Icon.x /></button>}
         </div>
@@ -172,6 +172,8 @@ function Clinics() {
 
 function Profile({ profile, onReset }) {
   const [confirmingReset, setConfirmingReset] = useState(false);
+
+  useBackHandler(confirmingReset, () => setConfirmingReset(false));
   const initials = (profile.insurer?.name || 'S').split(/\s+/).slice(0, 2).map(s => s[0]).join('').toUpperCase();
   const start = new Date(profile.date);
   const elapsedMonths = Math.max((Date.now() - start.getTime()) / (1000 * 60 * 60 * 24 * 30.4375), 0);
@@ -244,6 +246,8 @@ function Profile({ profile, onReset }) {
             </div>
           )}
         </Section>
+
+        <Disclaimer style={{ marginBottom: 14 }} />
       </div>
     </div>
   );

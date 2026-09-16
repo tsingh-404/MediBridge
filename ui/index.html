@@ -7,20 +7,53 @@
 <meta name="theme-color" content="#F5F6F0" />
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-<link rel="preconnect" href="https://api.fontshare.com" />
-<link href="https://api.fontshare.com/v2/css?f[]=general-sans@400,500,600,700&f[]=cabinet-grotesk@500,700&display=swap" rel="stylesheet" />
-<link rel="preconnect" href="https://fonts.googleapis.com" />
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet" />
+
+<!-- Self-hosted webfonts (mobile/scripts/fetch-fonts.mjs). No CDN at runtime. -->
+<link rel="stylesheet" href="fonts/fonts.css" />
+
 <style>
+  /* Every colour is declared twice: an sRGB hex fallback first, then the oklch()
+     original. Browsers without oklch() (Safari < 15.4, Chrome < 111) keep the
+     hex; everywhere else the second declaration wins. ui/tokens.js reads these
+     through var(), so inline styles inherit the same fallback behaviour. */
   :root {
     --bg: #F5F6F0;
     --surface: #FFFFFF;
     --ink: #131714;
     --ink-muted: #4C5A50;
     --border: #DBE1DB;
+
+    --accent: #0074a0;
     --accent: oklch(52% 0.12 230);
+    --accent-soft: #dbf3ff;
     --accent-soft: oklch(95% 0.03 230);
+    --accent-ink: #004264;
+    --accent-ink: oklch(35% 0.1 230);
+
+    --highlight: #f4a34b;
+    --highlight: oklch(78% 0.14 65);
+    --highlight-soft: #ffedd6;
+    --highlight-soft: oklch(96% 0.04 65);
+
+    --ok: #4b8a63;
+    --ok: oklch(58% 0.09 155);
+    --ok-soft: #e5f3e9;
+    --ok-soft: oklch(95% 0.02 155);
+    --warn: #d49838;
+    --warn: oklch(72% 0.13 75);
+    --warn-soft: #ffefd5;
+    --warn-soft: oklch(96% 0.04 75);
+    --bad: #bb5752;
+    --bad: oklch(58% 0.13 25);
+    --bad-soft: #ffebe8;
+    --bad-soft: oklch(96% 0.03 25);
+
+    --hero-1: #e8f8ff;
+    --hero-1: oklch(97% 0.02 230);
+    --hero-2: #d8f5f6;
+    --hero-2: oklch(95% 0.03 200);
+    --hero-3: #ffedd6;
+    --hero-3: oklch(96% 0.04 65);
   }
   html, body { margin: 0; padding: 0; background: var(--bg); font-family: "General Sans", system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
   html, body, #root { height: 100%; }
@@ -32,7 +65,11 @@
   ::selection { background: var(--accent-soft); color: var(--ink); }
   *::-webkit-scrollbar { width: 8px; height: 8px; }
   *::-webkit-scrollbar-track { background: transparent; }
-  *::-webkit-scrollbar-thumb { background: color-mix(in oklab, var(--accent) 30%, #9db3ff 70%); border-radius: 999px; }
+  *::-webkit-scrollbar-thumb {
+    background: #6f8fc4;                                            /* fallback: no color-mix() */
+    background: color-mix(in oklab, var(--accent) 30%, #9db3ff 70%);
+    border-radius: 999px;
+  }
   @keyframes fadeInUp {
     from { opacity: 0; transform: translateY(8px); }
     to { opacity: 1; transform: translateY(0); }
@@ -50,25 +87,29 @@
     to { opacity: 1; transform: translateX(0); }
   }
 </style>
-
-<script src="https://unpkg.com/react@18.3.1/umd/react.production.min.js" crossorigin="anonymous"></script>
-<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js" crossorigin="anonymous"></script>
-<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
-
-<script src="tokens.js"></script>
-<script src="api.js"></script>
-<script type="text/babel" src="shell.jsx"></script>
-<script type="text/babel" src="screens/onboarding.jsx"></script>
-<script type="text/babel" src="screens/chat.jsx"></script>
-<script type="text/babel" src="screens/calc.jsx"></script>
-<script type="text/babel" src="screens/clinics-profile.jsx"></script>
-<script type="text/babel" src="app.jsx"></script>
 </head>
 <body>
 <div id="root"></div>
 
-<script type="text/babel" data-presets="react">
-  ReactDOM.createRoot(document.getElementById('root')).render(<App />);
-</script>
+<!-- Vendored React (ui/vendor/) — no unpkg, no in-browser Babel. -->
+<script src="vendor/react.production.min.js"></script>
+<script src="vendor/react-dom.production.min.js"></script>
+
+<!-- Runtime config: must precede api.js. The mobile build overwrites this file. -->
+<script src="config.js"></script>
+
+<!-- Precompiled by `npm run build:web` in mobile/. These are classic scripts that
+     share globals, so the order below is load-bearing — it mirrors the original
+     dependency order (tokens/api -> shell primitives -> screens -> App -> mount). -->
+<script src="js/tokens.js"></script>
+<script src="js/api.js"></script>
+<script src="js/native.js"></script>
+<script src="js/shell.js"></script>
+<script src="js/screens/onboarding.js"></script>
+<script src="js/screens/chat.js"></script>
+<script src="js/screens/calc.js"></script>
+<script src="js/screens/clinics-profile.js"></script>
+<script src="js/app.js"></script>
+<script src="js/boot.js"></script>
 </body>
 </html>

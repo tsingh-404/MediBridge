@@ -3,10 +3,12 @@ from __future__ import annotations
 
 from datetime import date, datetime
 
+from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import tool
 
 from medibridge.data import db as dbmod
 from medibridge.data import queries
+from medibridge.profile import device_from_config, device_scope
 
 # Deed groups with NIL out-of-hospital waiting (Schedule 4)
 _NIL_OUTPATIENT_GROUPS = {"A1", "A2", "A22", "A23", "A46"}
@@ -24,8 +26,11 @@ def _parse_iso(d: str) -> date:
     return datetime.strptime(d, "%Y-%m-%d").date()
 
 
-def _get_user_tier_id(conn) -> str | None:
-    row = conn.execute("SELECT tier_id FROM user_profile WHERE id = 1").fetchone()
+def _get_user_tier_id(conn, device_id: str | None = None) -> str | None:
+    where, params = device_scope(device_id)
+    row = conn.execute(
+        f"SELECT tier_id FROM user_profile WHERE {where}", params
+    ).fetchone()
     return row["tier_id"] if row else None
 
 
@@ -40,7 +45,9 @@ def _classify(item: dict, condition: str | None) -> str:
 
 
 @tool
-def check_waiting_period(item_num: str, condition: str | None = None) -> dict:
+def check_waiting_period(
+    item_num: str, condition: str | None = None, config: RunnableConfig = None
+) -> dict:
     """Check if a waiting period applies to a service.
 
     Args:
@@ -54,7 +61,8 @@ def check_waiting_period(item_num: str, condition: str | None = None) -> dict:
             return {"error": f"item {item_num} not found"}
         cond_type = _classify(item, condition)
 
-        tier_id = _get_user_tier_id(conn)
+        device_id = device_from_config(config)
+        tier_id = _get_user_tier_id(conn, device_id)
         waiting_months = None
         notes = None
         if tier_id:
@@ -77,7 +85,10 @@ def check_waiting_period(item_num: str, condition: str | None = None) -> dict:
             waiting_months = defaults.get(cond_type, 2)
 
         # Compare against policy_start_date
-        prow = conn.execute("SELECT policy_start_date FROM user_profile WHERE id = 1").fetchone()
+        pwhere, pparams = device_scope(device_id)
+        prow = conn.execute(
+            f"SELECT policy_start_date FROM user_profile WHERE {pwhere}", pparams
+        ).fetchone()
         if prow:
             start = _parse_iso(prow["policy_start_date"])
             elapsed = _months_elapsed(start, date.today())

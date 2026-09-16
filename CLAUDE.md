@@ -24,7 +24,7 @@ medibridge-cli
 # Ingest data (one-time after clone — requires knowledge/ directory)
 python -m medibridge.data.ingest
 python -m medibridge.data.ingest --skip-chroma   # skip vector embeddings
-python -m medibridge.data.ingest --no-reset      # preserve existing SQLite, append only
+python -m medibridge.data.ingest --no-reset      # keep DB file; writers may replace/upsert rows
 
 # Tests
 python -m pytest tests/ -v
@@ -36,7 +36,73 @@ python -m build
 
 **Required env:** `OPENAI_API_KEY` in `.env` (see `.env.example`). Optional: `LANGSMITH_*` vars for tracing.
 
-**`knowledge/` directory is not in repo** — must be provided externally before ingestion. Contains: MBS XML, IMAP TSV, Deed PDF, MBS Book PDF, Item Info PDF, per-insurer markdown.
+For test/build tooling use `pip install -e ".[dev]"`.
+
+**`knowledge/` is tracked in this private repo** and contains the source files for ingestion: MBS XML, IMAP TSV, Deed PDF, MBS Book PDF, Item Info PDF, per-insurer markdown, and reference notes.
+
+## Frontend build (`ui/` is no longer no-build)
+
+`ui/*.jsx` is precompiled to `ui/js/*.js` by esbuild. There is no Babel in the
+browser and no CDN at runtime — React is vendored in `ui/vendor/` and the fonts
+are self-hosted in `ui/fonts/`. **After editing anything in `ui/`, rebuild:**
+
+```bash
+cd mobile && npm ci && npm run build:web    # -> ui/js/, ui/vendor/
+```
+
+`ui/js/`, `ui/vendor/` and `ui/fonts/` are **committed** — the Dockerfile has no
+Node stage, so the server must run with a Python-only toolchain. CI fails if
+they drift from the sources.
+
+Critical constraint: `ui/` is a set of **classic scripts sharing globals**, not
+ES modules (`shell.jsx` destructures React into the global lexical scope; every
+file ends `window.X = X`). So the build is a per-file *transform*, never a
+bundle, and identifier minification stays off. Script order in `index.html` is
+load-bearing. Adding a file means adding it to `ENTRIES` in
+`mobile/scripts/build-web.mjs` **and** to the script tags in `ui/index.html`.
+
+## Mobile (Capacitor)
+
+`mobile/` owns the Capacitor CLI, the web build, and the native projects.
+
+```bash
+cd mobile
+MB_API_BASE=https://your-api npm run sync   # build:web -> www/ -> cap sync
+npm run android                             # open Android Studio
+npm run android:apk                         # Windows debug APK (gradlew.bat, needs JDK 21)
+npm run ios                                 # open Xcode
+npm run ios:sim                             # unsigned simulator compile check (macOS/Xcode)
+npm run guard                               # fail on dev-only settings in a release
+npm run make:art                            # regenerate icon/splash from mobile/assets-src
+npm run fetch:fonts                         # re-vendor webfonts into ui/fonts/
+```
+
+`MB_API_BASE` is required — the app bundle has no server of its own, so an empty
+`apiBase` would resolve against `capacitor://localhost`. It is written into
+`mobile/www/config.js`; the checked-in `ui/config.js` stays same-origin for web.
+
+Native plugins are reached through `window.Capacitor.Plugins` in `ui/native.js`,
+never imported — that keeps the no-bundler constraint above intact while still
+requiring the npm packages for `cap sync`. On the web `window.Capacitor` is
+undefined and every native path no-ops.
+
+OS floors are set by the CSS, not by preference: `oklch()`/`100dvh` need Safari
+15.4+ and `color-mix(in oklab)` needs 16.2+, so iOS deployment target is **16.0**
+and `minSdkVersion` is **26**. `index.html` also declares an sRGB hex fallback
+before each `oklch()`.
+
+## Profiles are device-scoped
+
+`user_profile.device_id` keys one row per install. The mobile app sends
+`X-MB-Device` (a UUID in `localStorage`, see `ui/api.js`); requests without the
+header — CLI and desktop web — use the shared legacy row (`device_id IS NULL`),
+which is also the only one mirrored to `data/user_profile.json`.
+
+The id reaches the agent through the LangGraph config
+(`config={"configurable": {"device_id": ...}}`), and the profile-aware tools
+(`coverage_calculator`, `waiting_period`, `oshc_rules`) read it from an injected
+`RunnableConfig` that is excluded from the schema shown to the model. Use
+`profile.device_scope()` for any new query against `user_profile`.
 
 ## Architecture
 
@@ -58,7 +124,7 @@ CLI (cli.py + onboarding.py)
 | `schema.py` | All `CREATE TABLE` / `CREATE INDEX` / FTS5 DDL |
 | `queries.py` | Read helpers: `get_item_by_number`, `search_items_by_keyword`, `search_clinics`, `ALLOWED_CLINIC_TYPES`, … |
 | `parsers/` | Raw input → in-memory: `mbs_xml`, `imap`, `oshc_deed`, `mbs_book`, `mbs_item_info`, `knowledge_md` |
-| `ingest/` | In-memory → SQLite/Chroma writes: `mbs`, `insurers`, `oshc_rules`, `clinics`, `chroma`. Orchestrator in `__init__.py`; entry point in `__main__.py` |
+| `ingest/` | In-memory → SQLite/Chroma writes: `mbs`, `insurers`, `oshc_rules`, `clinics`, `chroma`. Orchestrator in `pipeline.py`; entry point in `__main__.py` |
 | `vectorstore.py` | Chroma client + add/query helpers |
 
 **Other key modules:**
@@ -71,7 +137,7 @@ CLI (cli.py + onboarding.py)
 | `agent/graph.py` | `build_graph()` — LangGraph state machine entry point |
 | `agent/prompts.py` | `SYSTEM_TEMPLATE` + `system_prompt()` — injected per-turn with live user profile |
 
-**Adding a new data source:** drop the raw file under `data/sources/`, add a parser under `data/parsers/`, add a writer under `data/ingest/<source>.py`, wire it into `data/ingest/__init__.py:ingest_sqlite()`, and extend `data/schema.py` with the table.
+**Adding a new data source:** government/policy sources usually live under `knowledge/`; structured seed files live under `data/sources/`. Add a parser under `data/parsers/`, add a writer under `data/ingest/<source>.py`, wire it into `data/ingest/pipeline.py:ingest_sqlite()`, and extend `data/schema.py` with the table.
 
 ## Coverage Calculator Logic
 
@@ -89,14 +155,25 @@ Reciprocal rank fusion: 60% vector (ChromaDB `mbs_descriptions`) + 40% FTS5 (SQL
 
 ## Clinic Search (search_clinics)
 
-Queensland-only clinic directory (620 rows). Source DB at `data/sources/clinics_qld.db` is ingested into the `clinics` table in `medibridge.db`. Filters: `postcode` and/or `suburb` (case-insensitive), optional `clinic_type` ∈ {GP, Psychology, Pharmacy, Psychiatry, Hospital}. The `type` column is comma-separated multi-value — the query wraps it with commas to avoid `Psych*` substring collisions. `phone`, `hours`, `latitude`, `longitude` are NULL across the dataset; the tool drops them from output.
+Queensland clinic directory (~1,450 rows after repair). Source CSV at `data/sources/clinics_qld.csv` is ingested into the `clinics` table in `medibridge.db`. Ingest repairs the scrape: postcodes recovered from the address tail, duplicate per-service-type listings merged into comma-joined `type` values. Filters: `postcode` and/or `suburb` (case-insensitive), optional `clinic_type` ∈ {GP, Psychology, Pharmacy, Psychiatry, Hospital}. The `type` column is comma-separated multi-value — the query wraps it with commas to avoid `Psych*` substring collisions. `phone`, `hours`, `latitude`, `longitude` are NULL across the dataset; the tool drops them from output.
 
-## Data Not in Repo
+## Tracked and Ignored Data
 
-- `data/` — committed pre-built DB, ChromaDB, and source seeds (only `user_profile.json` is gitignored)
-- `data/sources/clinics_qld.db` — raw QLD clinics DB (read-only seed input)
-- `knowledge/` — source documents for ingestion (must be provided)
+- `data/` — committed pre-built DB, ChromaDB, and source seeds (only `user_profile.json` and backup dumps are gitignored)
+- `data/sources/clinics_qld.csv` — raw QLD clinics CSV (read-only seed input, repaired at ingest)
+- `knowledge/` — tracked source documents for ingestion in this private repo
 - `.env` — secrets
+
+## CI
+
+`.github/workflows/mobile.yml` runs on PRs and `main` pushes:
+
+- `web-assets`: `npm ci`, `npm run build:web`, then verifies committed `ui/js`, `ui/vendor`, and `ui/fonts` do not drift.
+- `backend`: installs `.[dev]` and runs `python -m pytest tests/ -v`.
+- `android`: Node 22, JDK 21, Android SDK, `npm run guard`, `npm run sync`, then `./gradlew assembleDebug`.
+- `ios`: Node 22, `npm run guard`, `npm run sync`, then an unsigned simulator `xcodebuild`.
+
+`mobile/capacitor.config.json` must stay production-clean in git. Do not commit `server.url`, `server.cleartext`, or `android.allowMixedContent`; use uncommitted local config changes only for LAN/http debugging.
 
 ## graphify
 

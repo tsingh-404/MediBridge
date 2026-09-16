@@ -1,0 +1,36 @@
+{
+  "name": "medibridge-mobile",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Capacitor shell + web asset build for the MediBridge SPA in ../ui",
+  "scripts": {
+    "build:web": "node scripts/build-web.mjs",
+    "fetch:fonts": "node scripts/fetch-fonts.mjs",
+    "make:art": "node scripts/make-art.mjs",
+    "prepare:www": "node scripts/prepare-www.mjs",
+    "guard": "node scripts/release-guard.mjs",
+    "sync": "npm run build:web && npm run prepare:www && cap sync",
+    "android": "npm run sync && cap open android",
+    "android:apk": "npm run sync && cd android && gradlew.bat assembleDebug",
+    "ios": "npm run sync && cap open ios",
+    "ios:sim": "npm run sync && cd ios/App && xcodebuild -scheme App -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' -configuration Debug CODE_SIGNING_ALLOWED=NO build"
+  },
+  "devDependencies": {
+    "@capacitor/assets": "^3.0.5",
+    "@capacitor/cli": "^8.5.0",
+    "esbuild": "^0.25.0",
+    "react": "18.3.1",
+    "react-dom": "18.3.1"
+  },
+  "dependencies": {
+    "@capacitor/android": "^8.5.0",
+    "@capacitor/app": "^8.1.1",
+    "@capacitor/core": "^8.5.0",
+    "@capacitor/ios": "^8.5.0",
+    "@capacitor/keyboard": "^8.0.5",
+    "@capacitor/network": "^8.0.1",
+    "@capacitor/splash-screen": "^8.0.2",
+    "@capacitor/status-bar": "^8.0.3"
+  }
+}

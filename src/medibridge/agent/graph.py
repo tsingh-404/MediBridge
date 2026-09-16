@@ -2,12 +2,14 @@
 from __future__ import annotations
 
 from langchain_core.messages import SystemMessage
+from langchain_core.runnables import RunnableConfig
 from langchain_openai import ChatOpenAI
 from langgraph.graph import END, START, StateGraph
 from langgraph.prebuilt import ToolNode
 
 from medibridge.agent.prompts import system_prompt
 from medibridge.agent.state import MediBridgeState
+from medibridge.profile import device_from_config
 from medibridge.config import CHAT_MODEL, settings
 from medibridge.tools.clinic_search import search_clinics
 from medibridge.tools.coverage_calculator import calculate_oshc_coverage
@@ -29,10 +31,13 @@ def build_graph():
     llm = ChatOpenAI(model=CHAT_MODEL, api_key=settings.openai_api_key)
     llm_with_tools = llm.bind_tools(TOOLS, parallel_tool_calls=True)
 
-    def agent_node(state: MediBridgeState) -> dict:
+    def agent_node(state: MediBridgeState, config: RunnableConfig = None) -> dict:
         msgs = state["messages"]
         if not msgs or not isinstance(msgs[0], SystemMessage):
-            msgs = [SystemMessage(content=system_prompt())] + list(msgs)
+            # Profile context is per-device; ToolNode passes the same config on to
+            # the profile-aware tools.
+            prompt = system_prompt(device_from_config(config))
+            msgs = [SystemMessage(content=prompt)] + list(msgs)
         response = llm_with_tools.invoke(msgs)
         return {"messages": [response]}
 
