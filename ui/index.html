@@ -17,76 +17,88 @@
      hex; everywhere else the second declaration wins. ui/tokens.js reads these
      through var(), so inline styles inherit the same fallback behaviour. */
   :root {
+    /* One neutral family: warm-grey paper. No second (cool) grey anywhere. */
     --bg: #F5F6F0;
     --surface: #FFFFFF;
+    --surface-muted: #EEF0EA;
+    --border: #DBE1DB;
+    --border-strong: #C8D0C8;
+
     --ink: #131714;
     --ink-muted: #4C5A50;
-    --border: #DBE1DB;
+    --ink-subtle: #5F6E66;
 
+    /* One brand accent. --accent-strong is the only fill that carries white
+       text (WCAG AA); --accent is for borders, glyphs and progress fills. */
     --accent: #0074a0;
     --accent: oklch(52% 0.12 230);
+    --accent-strong: #005c80;
+    --accent-strong: oklch(45% 0.11 230);
     --accent-soft: #dbf3ff;
     --accent-soft: oklch(95% 0.03 230);
     --accent-ink: #004264;
     --accent-ink: oklch(35% 0.1 230);
 
-    --highlight: #f4a34b;
-    --highlight: oklch(78% 0.14 65);
-    --highlight-soft: #ffedd6;
-    --highlight-soft: oklch(96% 0.04 65);
-
+    /* Status colours are semantic only (covered / waiting / problem), never
+       decoration. The -ink variants are the text-safe pair for each fill. */
     --ok: #4b8a63;
     --ok: oklch(58% 0.09 155);
+    --ok-ink: #2f6b45;
+    --ok-ink: oklch(46% 0.09 155);
     --ok-soft: #e5f3e9;
     --ok-soft: oklch(95% 0.02 155);
+
     --warn: #d49838;
     --warn: oklch(72% 0.13 75);
-    --warn-soft: #ffefd5;
-    --warn-soft: oklch(96% 0.04 75);
+    --warn-ink: #8a5a12;
+    --warn-ink: oklch(48% 0.1 75);
+    --warn-soft: #fdf0dc;
+    --warn-soft: oklch(96% 0.035 75);
+
     --bad: #bb5752;
     --bad: oklch(58% 0.13 25);
+    --bad-ink: #9a3b36;
+    --bad-ink: oklch(45% 0.13 25);
     --bad-soft: #ffebe8;
     --bad-soft: oklch(96% 0.03 25);
 
-    --hero-1: #e8f8ff;
-    --hero-1: oklch(97% 0.02 230);
-    --hero-2: #d8f5f6;
-    --hero-2: oklch(95% 0.03 200);
-    --hero-3: #ffedd6;
-    --hero-3: oklch(96% 0.04 65);
+    --font-display: "Cabinet Grotesk", "General Sans", -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+    --font-sans: "General Sans", -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+    --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+
+    /* One radius scale: chips, controls, sheets. Full pills are reserved for
+       the selected nav glyph, segmented toggles and progress tracks. */
+    --r-chip: 8px;
+    --r-control: 12px;
+    --r-sheet: 16px;
+    --r-pill: 999px;
+
+    /* Shadows carry the paper hue, never pure black, and only two levels:
+       a hairline lift and a dock that floats over scrolling content. */
+    --shadow-1: 0 1px 2px rgba(19, 23, 20, 0.05);
+    --shadow-dock: 0 -8px 24px -14px rgba(19, 23, 20, 0.22);
+
+    --ease: cubic-bezier(0.22, 1, 0.36, 1);
+    --dur-fast: 140ms;
+    --dur: 220ms;
   }
-  html, body { margin: 0; padding: 0; background: var(--bg); font-family: "General Sans", system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+  html, body { margin: 0; padding: 0; background: var(--bg); font-family: var(--font-sans); -webkit-font-smoothing: antialiased; }
   html, body, #root { height: 100%; }
-  #root { width: 100vw; }
+  #root { width: 100%; position: relative; }
   * { box-sizing: border-box; }
   /* prevent iOS rubber-band scrolling on the shell; inner scroll containers still scroll */
   body { overscroll-behavior-y: none; }
+  h1, h2, h3, h4, p { margin: 0; }
   input, button, textarea { font-family: inherit; }
   ::selection { background: var(--accent-soft); color: var(--ink); }
   *::-webkit-scrollbar { width: 8px; height: 8px; }
   *::-webkit-scrollbar-track { background: transparent; }
-  *::-webkit-scrollbar-thumb {
-    background: #6f8fc4;                                            /* fallback: no color-mix() */
-    background: color-mix(in oklab, var(--accent) 30%, #9db3ff 70%);
-    border-radius: 999px;
-  }
-  @keyframes fadeInUp {
-    from { opacity: 0; transform: translateY(8px); }
-    to { opacity: 1; transform: translateY(0); }
-  }
-  @keyframes pulse {
-    0%, 100% { opacity: 1; transform: scale(1); }
-    50% { opacity: 0.55; transform: scale(0.98); }
-  }
-  @keyframes shimmer {
-    0% { background-position: -250px 0; }
-    100% { background-position: calc(100% + 250px) 0; }
-  }
-  @keyframes slideIn {
-    from { opacity: 0; transform: translateX(10px); }
-    to { opacity: 1; transform: translateX(0); }
-  }
+  *::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: var(--r-pill); }
 </style>
+
+<!-- Component layer. Must be copied into the native bundle too, so it is
+     listed in mobile/scripts/prepare-www.mjs. -->
+<link rel="stylesheet" href="styles.css" />
 </head>
 <body>
 <div id="root"></div>

@@ -1,4 +1,6 @@
 // Cost Calculator — multi-item bill backed by real MBS catalogue + /api/coverage.
+const SETTINGS = [['out_of_hospital', 'Out of hospital'], ['in_hospital', 'In hospital']];
+
 function CostCalc({ profile }) {
   const [view, setView] = useState('list');
 
@@ -97,10 +99,14 @@ function CostCalc({ profile }) {
     gap = Math.max(totalCharge - cappedBenefit, 0);
   }
   const aboveSchedule = hasCharge && totalCharge > totalSchedule && totalSchedule > 0;
+
+  // The headline gap counts to its new value so a change in the bill reads as a
+  // change, not a redraw. Honors reduced motion by skipping the tween.
   useEffect(() => {
+    const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     const from = displayGap;
     const to = gap;
-    if (Math.abs(to - from) < 0.01) return;
+    if (reduce || Math.abs(to - from) < 0.01) { setDisplayGap(to); return; }
     const start = performance.now();
     const duration = 260;
     let frame;
@@ -116,171 +122,276 @@ function CostCalc({ profile }) {
 
   if (view === 'search') {
     return (
-      <div style={{ height: '100%', display: 'flex', flexDirection: 'column', background: MB.bg }}>
-        <Header title="Add item from your bill" subtitle="Search MBS by keyword or item number" onBack={() => setView('list')} />
-        <div style={{ padding: '14px 20px 8px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: MB.surface, border: `1px solid ${MB.border}`, borderRadius: 12, padding: '0 14px', height: 46 }}>
-            <Icon.search style={{ color: MB.inkSubtle }} />
-            <input autoFocus value={query} onChange={e => setQuery(e.target.value)} placeholder='Try "GP", "specialist consultation", or "23"' style={{ flex: 1, background: 'none', border: 'none', outline: 'none', fontFamily: MB.sans, fontSize: 16, color: MB.ink }} />
-            {query && <button onClick={() => setQuery('')} style={{ background: 'none', border: 'none', color: MB.inkSubtle, cursor: 'pointer' }}><Icon.x /></button>}
+      <div className="mb-screen">
+        <Header title="Add an item" subtitle="Search the MBS by keyword or item number" onBack={() => setView('list')} />
+        <div style={{ padding: '14px 16px 8px' }}>
+          <div className="mb-field">
+            <Icon.search />
+            <input
+              autoFocus
+              className="mb-input"
+              value={query}
+              onChange={e => setQuery(e.target.value)}
+              placeholder='Try "GP", "specialist consultation", or "23"'
+              aria-label="Search MBS items"
+            />
+            {query && (
+              <button type="button" className="mb-field__clear" onClick={() => setQuery('')} aria-label="Clear search">
+                <Icon.x />
+              </button>
+            )}
           </div>
         </div>
-        <div style={{ flex: 1, overflow: 'auto', padding: '6px 16px 100px' }}>
+        <div className="mb-scroll" style={{ padding: '6px 16px 100px' }}>
           {!query.trim() && (
-            <div style={{ padding: 20, textAlign: 'center', fontFamily: MB.sans, fontSize: 13, color: MB.inkSubtle }}>
-              Type to search the live MBS catalogue.
+            <p className="mb-sub" style={{ padding: '20px 4px', textAlign: 'center' }}>
+              Search the live MBS catalogue to add what the clinic charged you for.
+            </p>
+          )}
+          {searching && (
+            <div className="mb-list" aria-label="Searching" role="status">
+              {[0, 1, 2].map(i => (
+                <div key={i} className="mb-row" style={{ flexDirection: 'column', gap: 8 }}>
+                  <Skeleton width={84} height={14} />
+                  <Skeleton width={i % 2 ? '70%' : '90%'} height={12} />
+                </div>
+              ))}
             </div>
           )}
-          {searching && <div style={{ padding: 12, fontFamily: MB.sans, fontSize: 13, color: MB.inkSubtle }}>Searching…</div>}
-          {searchErr && <div style={{ padding: 12, fontFamily: MB.sans, fontSize: 13, color: MB.bad }}>{searchErr}</div>}
-          {!searching && query.trim() && results.length === 0 && !searchErr && (
-            <div style={{ padding: 20, textAlign: 'center', fontFamily: MB.sans, fontSize: 13, color: MB.inkSubtle }}>No items found.</div>
+          {searchErr && (
+            <p className="mb-note mb-note--bad">Search failed: {searchErr}. Check your connection and try again.</p>
           )}
-          {results.map(it => {
-            const inList = items.some(x => x.item_num === it.item_num);
-            const isGp = (it.benefit_type || '').toUpperCase() === 'E' || ['A1', 'A2'].includes((it.group_code || '').toUpperCase());
-            return (
-              <div key={it.item_num} style={{ background: MB.surface, border: `1px solid ${MB.border}`, borderRadius: 12, padding: '12px 14px', marginBottom: 8, display: 'flex', alignItems: 'flex-start', gap: 10 }}>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
-                    <span style={{ fontFamily: MB.mono, fontSize: 11, fontWeight: 600, color: MB.accentInk, background: MB.accentSoft, padding: '2px 7px', borderRadius: 6 }}>MBS {it.item_num}</span>
-                    <Tag kind="neutral" size="xs">{isGp ? 'GP' : 'Specialist'}</Tag>
+          {!searching && query.trim() && results.length === 0 && !searchErr && (
+            <p className="mb-sub" style={{ padding: '20px 4px', textAlign: 'center' }}>
+              No items match that. Try a shorter keyword, or the item number from your bill.
+            </p>
+          )}
+          {!searching && results.length > 0 && (
+            <div className="mb-list">
+              {results.map(it => {
+                const inList = items.some(x => x.item_num === it.item_num);
+                const isGp = (it.benefit_type || '').toUpperCase() === 'E' || ['A1', 'A2'].includes((it.group_code || '').toUpperCase());
+                return (
+                  <div key={it.item_num} className="mb-row">
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 5 }}>
+                        <Tag kind="accent">MBS {it.item_num}</Tag>
+                        <Tag>{isGp ? 'GP' : 'Specialist'}</Tag>
+                      </div>
+                      <p className="mb-sub mb-clamp" style={{ color: MB.ink, marginBottom: 4 }}>{it.description}</p>
+                      <p className="mb-num" style={{ fontSize: 11, color: MB.inkSubtle }}>
+                        Schedule fee {fmtAUD(it.schedule_fee)}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      className="mb-iconbtn"
+                      onClick={() => addItem(it)}
+                      disabled={inList}
+                      aria-label={inList ? `MBS ${it.item_num} already added` : `Add MBS ${it.item_num}`}
+                    >
+                      {inList
+                        ? <Icon.check style={{ color: MB.okInk }} />
+                        : <Icon.plus style={{ color: MB.accentInk }} />}
+                    </button>
                   </div>
-                  <div style={{ fontFamily: MB.sans, fontSize: 13, color: MB.ink, lineHeight: 1.4, marginBottom: 4 }}>{it.description}</div>
-                  <div style={{ fontFamily: MB.mono, fontSize: 11, color: MB.inkSubtle }}>Schedule fee {fmtAUD(it.schedule_fee)}</div>
-                </div>
-                <button onClick={() => !inList && addItem(it)} disabled={inList} style={{ width: 36, height: 36, borderRadius: 10, background: inList ? MB.surfaceMuted : MB.ink, color: inList ? MB.inkSubtle : '#fff', border: 'none', cursor: inList ? 'default' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{inList ? <Icon.check /> : <Icon.plus />}</button>
-              </div>
-            );
-          })}
+                );
+              })}
+            </div>
+          )}
         </div>
       </div>
     );
   }
 
   return (
-    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', background: MB.bg }}>
-      <Header title="Cost calculator" subtitle="Add items, enter the bill total, see your gap." right={
-        <button onClick={() => setView('search')} style={{ height: 32, padding: '0 12px', borderRadius: 10, background: MB.ink, color: '#fff', border: 'none', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 5, fontFamily: MB.sans, fontSize: 13, fontWeight: 600 }}><Icon.plus />Add item</button>
-      } />
+    <div className="mb-screen">
+      <Header
+        title="Cost calculator"
+        subtitle={`${profile.insurer.name} · ${profile.tier.name}`}
+        // While the list is empty the empty state owns the only call to action.
+        right={items.length > 0 ? (
+          <Button kind="primary" size="sm" onClick={() => setView('search')} leading={<Icon.plus size={16} />}>
+            Add item
+          </Button>
+        ) : null}
+      />
 
-      <div style={{ flex: 1, overflow: 'auto', padding: '14px 16px 220px' }}>
+      <div
+        className="mb-scroll"
+        style={{
+          padding: `14px 16px ${items.length ? 210 : 120}px`,
+          // Empty: centre the one thing on screen. Auto margins rather than
+          // justify-content so a short viewport can still scroll to the top.
+          display: items.length === 0 ? 'flex' : undefined,
+          flexDirection: items.length === 0 ? 'column' : undefined,
+        }}
+      >
         {items.length === 0 ? (
-          <div style={{ background: MB.gradientHero, border: `1px solid ${MB.border}`, borderRadius: 14, padding: 24, textAlign: 'center', marginTop: 8, boxShadow: MB.shadowMd }}>
-            <div style={{ width: 50, height: 50, borderRadius: 14, background: MB.surface, color: MB.accentInk, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', marginBottom: 10, boxShadow: MB.shadow }}><Icon.calc /></div>
-            <div style={{ fontFamily: MB.sans, fontSize: 15, color: MB.ink, fontWeight: 650, marginBottom: 4 }}>Add items from your bill</div>
-            <div style={{ fontFamily: MB.sans, fontSize: 12.5, color: MB.inkMuted, marginBottom: 14, lineHeight: 1.5 }}>Find each MBS item the clinic charged you for, enter the bill total, and we'll calculate your out‑of‑pocket gap using your real OSHC tier.</div>
-            <Button kind="primary" onClick={() => setView('search')} leading={<Icon.plus />}>Add MBS item</Button>
+          <div className="mb-empty" style={{ marginTop: 'auto', marginBottom: 'auto' }}>
+            <span className="mb-empty__glyph"><Icon.costs size={24} /></span>
+            <p className="mb-lede">Add items from your bill</p>
+            <p className="mb-sub" style={{ margin: '8px auto 18px', maxWidth: '34ch' }}>
+              Find each MBS item the clinic charged you for, enter the bill total, and
+              MediBridge works out your gap from your real OSHC tier.
+            </p>
+            <Button kind="accent" onClick={() => setView('search')} leading={<Icon.plus size={16} />}>
+              Add item
+            </Button>
           </div>
         ) : (
           <>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 4px 8px' }}>
-              <div style={{ fontFamily: MB.mono, fontSize: 11, color: MB.inkSubtle, letterSpacing: 0.4, textTransform: 'uppercase' }}>
-                <span style={{ color: MB.accentInk, marginRight: 6 }}>1</span>Items on your bill
-              </div>
-              <div style={{ fontFamily: MB.mono, fontSize: 11, color: MB.inkSubtle }}>{items.length} item{items.length !== 1 ? 's' : ''}</div>
+            <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between' }}>
+              <h2 className="mb-label">Items on your bill</h2>
+              <p className="mb-num" style={{ fontSize: 11, color: MB.inkSubtle }}>
+                {items.length} item{items.length !== 1 ? 's' : ''}
+              </p>
             </div>
 
-            <div style={{ background: MB.surface, border: `1px solid ${MB.border}`, borderRadius: 14, marginBottom: 16, overflow: 'hidden' }}>
-              {perItem.map((row, idx) => {
+            <div className="mb-list" style={{ marginBottom: 20 }}>
+              {perItem.map((row) => {
                 const isGp = (row.it.benefit_type || '').toUpperCase() === 'E' || ['A1', 'A2'].includes((row.it.group_code || '').toUpperCase());
                 return (
-                  <div key={row.it.uid} style={{ padding: '12px 14px', borderBottom: idx < perItem.length - 1 ? `1px solid ${MB.border}` : 'none', animation: `fadeInUp ${MB.durationFast} ${MB.ease}`, background: row.isCovered === false ? MB.badSoft : 'transparent' }}>
-                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
-                          <span style={{ fontFamily: MB.mono, fontSize: 11, fontWeight: 600, color: MB.accentInk, background: MB.accentSoft, padding: '2px 7px', borderRadius: 6 }}>MBS {row.it.item_num}</span>
-                          <Tag kind="neutral" size="xs">{isGp ? 'GP' : 'Specialist'}</Tag>
-                          {!row.loading && row.isCovered === false && <Tag kind="bad" size="xs">Not covered</Tag>}
-                        </div>
-                        <div style={{ fontFamily: MB.sans, fontSize: 13, color: MB.ink, lineHeight: 1.35, fontWeight: 550, marginBottom: 6 }}>{row.it.description}</div>
-
-                        <div style={{ display: 'flex', background: MB.bg, padding: 2, borderRadius: 10, border: `1px solid ${MB.border}`, width: 'fit-content', marginBottom: 8 }}>
-                          {[['out_of_hospital', 'OOH'], ['in_hospital', 'In‑hospital']].map(([k, l]) => {
-                            const on = row.it.setting === k;
-                            return (
-                              <button key={k} onClick={() => setSetting(row.it.uid, k)} style={{ height: 32, padding: '0 12px', borderRadius: 8, background: on ? MB.surface : 'transparent', color: on ? MB.ink : MB.inkMuted, border: 'none', fontFamily: MB.sans, fontSize: 11.5, fontWeight: 600, cursor: 'pointer', transition: `all ${MB.durationFast} ${MB.ease}` }}>{l}</button>
-                            );
-                          })}
-                        </div>
-
-                        <div style={{ display: 'flex', gap: 16, fontFamily: MB.mono, fontSize: 11, flexWrap: 'wrap' }}>
-                          <span style={{ color: MB.inkSubtle }}>Sched. <span style={{ color: MB.ink, fontWeight: 600 }}>{fmtAUD(row.schedule)}</span></span>
-                          <span style={{ color: MB.inkSubtle }}>
-                            OSHC{row.pct ? ` ${row.pct}%` : ''}: <span style={{ color: row.isCovered === false ? MB.bad : MB.ok, fontWeight: 600 }}>
-                              {row.loading ? '…' : (row.error ? 'error' : fmtAUD(row.benefit))}
-                            </span>
-                          </span>
-                          <span style={{ color: MB.inkSubtle }}>
-                            Gap: <span style={{ color: (row.oopFallback || 0) > 0 ? 'oklch(48% 0.13 75)' : MB.ok, fontWeight: 600 }}>
-                              {row.loading ? '…' : (row.error ? '—' : (row.oop == null ? '—' : fmtAUD(row.oopFallback)))}
-                            </span>
-                          </span>
-                        </div>
-                        {row.notes.length > 0 && (
-                          <div style={{ marginTop: 6, fontFamily: MB.sans, fontSize: 11, color: MB.inkMuted, lineHeight: 1.4 }}>
-                            {row.notes.map((n, i) => <div key={i}>· {n}</div>)}
-                          </div>
-                        )}
-                        {row.error && (
-                          <div style={{ marginTop: 6, fontFamily: MB.sans, fontSize: 11, color: MB.bad }}>Coverage lookup failed: {row.error}</div>
-                        )}
+                  <div
+                    key={row.it.uid}
+                    className="mb-row"
+                    style={{ background: row.isCovered === false ? MB.badSoft : undefined }}
+                  >
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 5, flexWrap: 'wrap' }}>
+                        <Tag kind="accent">MBS {row.it.item_num}</Tag>
+                        <Tag>{isGp ? 'GP' : 'Specialist'}</Tag>
+                        {!row.loading && row.isCovered === false && <Tag kind="bad">Not covered</Tag>}
                       </div>
-                      <button onClick={() => removeItem(row.it.uid)} style={{ width: 28, height: 28, borderRadius: 8, background: 'transparent', border: 'none', color: MB.inkSubtle, cursor: 'pointer', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Icon.x /></button>
+                      <p className="mb-sub mb-clamp mb-clamp--2" style={{ color: MB.ink, fontWeight: 550, marginBottom: 8 }}>
+                        {row.it.description}
+                      </p>
+
+                      <div className="mb-segment" style={{ marginBottom: 10 }}>
+                        {SETTINGS.map(([k, label]) => (
+                          <button
+                            key={k}
+                            type="button"
+                            className="mb-segment__opt"
+                            aria-pressed={row.it.setting === k}
+                            onClick={() => setSetting(row.it.uid, k)}
+                          >
+                            {label}
+                          </button>
+                        ))}
+                      </div>
+
+                      {row.loading ? (
+                        <Skeleton width={180} height={11} />
+                      ) : (
+                        <p className="mb-num" style={{ fontSize: 11, color: MB.inkSubtle, display: 'flex', gap: 14, flexWrap: 'wrap' }}>
+                          <span>Fee <b style={{ color: MB.ink }}>{fmtAUD(row.schedule)}</b></span>
+                          <span>
+                            OSHC{row.pct ? ` ${row.pct}%` : ''}{' '}
+                            <b style={{ color: row.isCovered === false ? MB.badInk : MB.okInk }}>
+                              {row.error ? 'error' : fmtAUD(row.benefit)}
+                            </b>
+                          </span>
+                          <span>
+                            Gap{' '}
+                            <b style={{ color: (row.oopFallback || 0) > 0 ? MB.warnInk : MB.okInk }}>
+                              {row.error || row.oop == null ? 'n/a' : fmtAUD(row.oopFallback)}
+                            </b>
+                          </span>
+                        </p>
+                      )}
+
+                      {row.notes.length > 0 && (
+                        <p className="mb-meta" style={{ marginTop: 8 }}>
+                          {row.notes.join(' ')}
+                        </p>
+                      )}
+                      {row.error && (
+                        <p className="mb-meta" style={{ marginTop: 8, color: MB.badInk }}>
+                          Coverage lookup failed: {row.error}
+                        </p>
+                      )}
                     </div>
+                    <button
+                      type="button"
+                      onClick={() => removeItem(row.it.uid)}
+                      aria-label={`Remove MBS ${row.it.item_num}`}
+                      className="mb-field__clear"
+                    >
+                      <Icon.x />
+                    </button>
                   </div>
                 );
               })}
             </div>
 
-            <div style={{ padding: '0 4px 8px', fontFamily: MB.mono, fontSize: 11, color: MB.inkSubtle, letterSpacing: 0.4, textTransform: 'uppercase' }}>
-              <span style={{ color: MB.accentInk, marginRight: 6 }}>2</span>Total clinic charge
-            </div>
-            <div style={{ background: MB.surface, border: `1px solid ${MB.border}`, borderRadius: 14, padding: '14px 16px', marginBottom: 16 }}>
-              <div style={{ fontFamily: MB.sans, fontSize: 12.5, color: MB.inkMuted, marginBottom: 10, lineHeight: 1.45 }}>
+            <h2 className="mb-label">Total clinic charge</h2>
+            <div className="mb-sheet" style={{ marginBottom: 20, padding: '14px 16px' }}>
+              <label className="mb-sub" htmlFor="mb-charge" style={{ display: 'block', marginBottom: 10 }}>
                 The total amount the clinic billed you for this visit.
+              </label>
+              <div className={`mb-field${aboveSchedule ? ' mb-field--invalid' : ''}`} style={{ minHeight: 52, background: MB.bg }}>
+                <span className="mb-num" style={{ fontSize: 18, color: MB.inkSubtle }}>$</span>
+                <input
+                  id="mb-charge"
+                  className="mb-input mb-num"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  placeholder="0.00"
+                  value={totalCharge ?? ''}
+                  onChange={e => { const v = e.target.value; setTotalCharge(v === '' ? null : (parseFloat(v) || 0)); }}
+                  style={{ fontSize: 22, fontWeight: 700, color: MB.ink }}
+                />
               </div>
-              <div style={{ display: 'flex', alignItems: 'center', background: MB.bg, border: `1px solid ${aboveSchedule ? 'oklch(72% 0.13 75)' : MB.border}`, borderRadius: 12, padding: '0 14px', height: 52 }}>
-                <span style={{ fontFamily: MB.sans, fontSize: 18, color: MB.inkSubtle, marginRight: 4 }}>$</span>
-                <input type="number" step="0.01" min="0" placeholder="0.00" value={totalCharge ?? ''} onChange={e => { const v = e.target.value; setTotalCharge(v === '' ? null : (parseFloat(v) || 0)); }} style={{ flex: 1, background: 'none', border: 'none', outline: 'none', fontFamily: MB.mono, fontSize: 22, fontWeight: 700, color: MB.ink, width: '100%' }} />
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 8, fontFamily: MB.mono, fontSize: 11, color: MB.inkSubtle }}>
+              <p className="mb-num" style={{ display: 'flex', justifyContent: 'space-between', marginTop: 10, fontSize: 11, color: MB.inkSubtle }}>
                 <span>Total schedule fee</span>
                 <span>{fmtAUD(totalSchedule)}</span>
-              </div>
+              </p>
               {aboveSchedule && (
-                <div style={{ marginTop: 8, padding: '8px 10px', background: MB.warnSoft, borderRadius: 8, fontFamily: MB.sans, fontSize: 11.5, color: 'oklch(40% 0.12 75)', lineHeight: 1.45 }}>
-                  Your clinic charged {fmtAUD(totalCharge - totalSchedule)} above the MBS schedule. OSHC won't reimburse the excess.
-                </div>
+                <p className="mb-note mb-note--warn" style={{ marginTop: 10 }}>
+                  Your clinic charged {fmtAUD(totalCharge - totalSchedule)} above the MBS
+                  schedule. OSHC will not reimburse the excess.
+                </p>
               )}
             </div>
 
-            <div style={{ padding: '0 4px 8px', fontFamily: MB.mono, fontSize: 11, color: MB.inkSubtle, letterSpacing: 0.4, textTransform: 'uppercase' }}>
-              <span style={{ color: MB.accentInk, marginRight: 6 }}>3</span>{mode === 'estimated' ? 'Estimated breakdown (at MBS schedule rate)' : 'Estimated breakdown'}
-            </div>
-            <div style={{ background: MB.surface, border: `1px solid ${MB.border}`, borderRadius: 14, padding: '14px 16px' }}>
-              <BreakdownRow label={mode === 'estimated' ? 'Total schedule fee' : 'Total clinic charge'} value={fmtAUD(mode === 'estimated' ? totalSchedule : totalCharge)} />
-              <div style={{ height: 1, background: MB.border, margin: '8px 0' }} />
-              <BreakdownRow label="OSHC covers" value={`− ${fmtAUD(cappedBenefit)}`} sub={`Sum of benefits across ${items.length} item${items.length !== 1 ? 's' : ''}`} accent="ok" />
-              <div style={{ height: 1, background: MB.border, margin: '8px 0' }} />
+            <h2 className="mb-label">
+              {mode === 'estimated' ? 'Estimated breakdown, at the MBS schedule rate' : 'Estimated breakdown'}
+            </h2>
+            <div className="mb-sheet" style={{ padding: '14px 16px' }}>
+              <BreakdownRow
+                label={mode === 'estimated' ? 'Total schedule fee' : 'Total clinic charge'}
+                value={fmtAUD(mode === 'estimated' ? totalSchedule : totalCharge)}
+              />
+              <span className="mb-rule" />
+              <BreakdownRow
+                label="OSHC covers"
+                value={`-${fmtAUD(cappedBenefit)}`}
+                sub={`Sum of benefits across ${items.length} item${items.length !== 1 ? 's' : ''}`}
+                accent="ok"
+              />
+              <span className="mb-rule" />
               <BreakdownRow
                 label="Your gap"
                 value={fmtAUD(gap)}
                 sub={mode === 'estimated'
-                  ? (gap > 0 ? 'Estimated — enter clinic total for actual gap' : (totalItemOOP === 0 ? 'Fully covered' : 'Estimated — enter clinic total for actual gap'))
+                  ? (gap > 0 || totalItemOOP > 0 ? 'Estimated. Enter the clinic total for the actual gap.' : 'Fully covered')
                   : (gap > 0 ? 'Out of pocket' : 'Fully covered')}
                 accent={gap > 0 ? 'warn' : 'ok'}
                 bold
               />
               {derivedFeeCount > 0 && (
-                <div style={{ marginTop: 10, padding: '8px 10px', background: MB.warnSoft, borderRadius: 8, fontFamily: MB.sans, fontSize: 11.5, color: 'oklch(40% 0.12 75)', lineHeight: 1.45 }}>
-                  {derivedFeeCount} item{derivedFeeCount !== 1 ? 's have' : ' has'} no automatic estimate — see notes. Totals understate the real gap.
-                </div>
+                <p className="mb-note mb-note--warn" style={{ marginTop: 12 }}>
+                  {derivedFeeCount} item{derivedFeeCount !== 1 ? 's have' : ' has'} no automatic
+                  estimate, so the totals understate the real gap. See the item notes.
+                </p>
               )}
               {mode === 'estimated' && anaesCount > 0 && (
-                <div style={{ marginTop: 10, padding: '8px 10px', background: MB.warnSoft, borderRadius: 8, fontFamily: MB.sans, fontSize: 11.5, color: 'oklch(40% 0.12 75)', lineHeight: 1.45 }}>
-                  Includes time-based anaesthesia items — actual cost varies with duration.
-                </div>
+                <p className="mb-note mb-note--warn" style={{ marginTop: 12 }}>
+                  This bill includes time-based anaesthesia items, so the actual cost varies
+                  with how long the procedure took.
+                </p>
               )}
             </div>
           </>
@@ -288,17 +399,22 @@ function CostCalc({ profile }) {
       </div>
 
       {items.length > 0 && (
-        <div style={{ position: 'absolute', bottom: 'calc(env(safe-area-inset-bottom, 0px) + 72px)', left: 0, right: 0, zIndex: 20, padding: '14px 16px', background: 'rgba(255,255,255,0.9)', borderTop: `1px solid ${MB.border}`, boxShadow: MB.shadowLg, backdropFilter: 'saturate(180%) blur(12px)' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-            <div>
-              <div style={{ fontFamily: MB.sans, fontSize: 12, color: MB.inkMuted }}>{mode === 'estimated' ? 'Estimated gap (schedule rate)' : 'Estimated out‑of‑pocket'}</div>
-              <div style={{ fontFamily: MB.mono, fontSize: 11, color: MB.inkSubtle, marginTop: 2 }}>
+        <div className="mb-dock" style={{ bottom: 'calc(env(safe-area-inset-bottom, 0px) + 64px)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 12 }}>
+            <div style={{ minWidth: 0 }}>
+              <p className="mb-sub" style={{ fontSize: 12.5 }}>
+                {mode === 'estimated' ? 'Estimated gap at schedule rate' : 'Estimated out-of-pocket'}
+              </p>
+              <p className="mb-num" style={{ fontSize: 11, color: MB.inkSubtle, marginTop: 2 }}>
                 {mode === 'estimated'
-                  ? `Sum of per-item gaps across ${items.length} item${items.length !== 1 ? 's' : ''}`
-                  : `${fmtAUD(totalCharge)} − ${fmtAUD(cappedBenefit)} covered`}
-              </div>
+                  ? `Across ${items.length} item${items.length !== 1 ? 's' : ''}`
+                  : `${fmtAUD(totalCharge)} less ${fmtAUD(cappedBenefit)} covered`}
+              </p>
             </div>
-            <div style={{ fontFamily: MB.mono, fontSize: 30, fontWeight: 700, color: gap > 0 ? 'oklch(48% 0.13 75)' : MB.ok, letterSpacing: -0.6 }}>{fmtAUD(displayGap)}</div>
+            <p className="mb-num" style={{
+              fontSize: 30, fontWeight: 700, letterSpacing: -0.6,
+              color: gap > 0 ? MB.warnInk : MB.okInk,
+            }}>{fmtAUD(displayGap)}</p>
           </div>
         </div>
       )}
@@ -307,14 +423,16 @@ function CostCalc({ profile }) {
 }
 
 function BreakdownRow({ label, value, sub, accent, bold }) {
-  const color = accent === 'ok' ? MB.ok : accent === 'warn' ? 'oklch(48% 0.13 75)' : MB.ink;
+  const color = accent === 'ok' ? MB.okInk : accent === 'warn' ? MB.warnInk : MB.ink;
   return (
-    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-      <div>
-        <div style={{ fontFamily: MB.sans, fontSize: 13, color: MB.ink, fontWeight: bold ? 650 : 500 }}>{label}</div>
-        {sub && <div style={{ fontFamily: MB.mono, fontSize: 10.5, color: MB.inkSubtle, marginTop: 1 }}>{sub}</div>}
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 12 }}>
+      <div style={{ minWidth: 0 }}>
+        <p className="mb-sub" style={{ color: MB.ink, fontWeight: bold ? 650 : 500 }}>{label}</p>
+        {sub && <p className="mb-meta" style={{ marginTop: 2 }}>{sub}</p>}
       </div>
-      <div style={{ fontFamily: MB.mono, fontSize: bold ? 22 : 15, fontWeight: 700, color, letterSpacing: -0.3 }}>{value}</div>
+      <p className="mb-num" style={{ fontSize: bold ? 22 : 15, fontWeight: 700, letterSpacing: -0.3, color }}>
+        {value}
+      </p>
     </div>
   );
 }

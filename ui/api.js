@@ -44,7 +44,7 @@
     if (!res.ok) {
       let detail = '';
       try { detail = (await res.json()).detail || ''; } catch {}
-      const err = new Error(`HTTP ${res.status} ${res.statusText}${detail ? ' — ' + detail : ''}`);
+      const err = new Error(`HTTP ${res.status} ${res.statusText}${detail ? '. ' + detail : ''}`);
       err.status = res.status;
       throw err;
     }

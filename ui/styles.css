@@ -1,0 +1,700 @@
+/* MediBridge component layer.
+ *
+ * Plain stylesheet, no build step: the SPA in ui/ is a set of classic scripts
+ * and this file is loaded by a <link> in index.html. The design tokens it reads
+ * are declared in the :root block of index.html (hex fallback + oklch original).
+ *
+ * The same file serves the web app and both Capacitor bundles, so it is listed
+ * in ASSETS in mobile/scripts/prepare-www.mjs. */
+
+/* ───────────────────────── Shell ───────────────────────── */
+
+/* Above phone width the app stays a single readable column instead of
+   stretching a phone layout across a desktop monitor. */
+@media (min-width: 600px) {
+  body { background: var(--surface-muted); }
+  #root {
+    max-width: 28rem;
+    margin: 0 auto;
+    background: var(--bg);
+    border-left: 1px solid var(--border);
+    border-right: 1px solid var(--border);
+  }
+}
+
+.mb-screen {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+}
+
+.mb-scroll {
+  flex: 1;
+  overflow: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* ───────────────────────── Type scale ───────────────────────── */
+
+.mb-title {
+  font-family: var(--font-display);
+  font-size: 19px;
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: -0.2px;
+  color: var(--ink);
+}
+
+.mb-headline {
+  font-family: var(--font-display);
+  font-size: 28px;
+  font-weight: 700;
+  line-height: 1.15;
+  letter-spacing: -0.7px;
+  color: var(--ink);
+  text-wrap: balance;
+}
+
+.mb-lede {
+  font-family: var(--font-display);
+  font-size: 21px;
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: -0.4px;
+  color: var(--ink);
+  text-wrap: balance;
+}
+
+.mb-body {
+  font-family: var(--font-sans);
+  font-size: 14.5px;
+  line-height: 1.5;
+  color: var(--ink);
+}
+
+.mb-sub {
+  font-family: var(--font-sans);
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--ink-muted);
+}
+
+.mb-meta {
+  font-family: var(--font-sans);
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--ink-subtle);
+}
+
+/* MBS descriptions are verbatim legal text and can run to a full paragraph.
+   Clamped in lists so a single item cannot take over the screen. */
+.mb-clamp {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow: hidden;
+}
+
+.mb-clamp--2 { -webkit-line-clamp: 2; }
+
+/* Section headings inside a screen. Sentence case, not a tracked-out
+   uppercase eyebrow. */
+.mb-label {
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.4;
+  color: var(--ink);
+  padding: 0 4px 8px;
+}
+
+/* Money and MBS item numbers: monospace with aligned digits so columns of
+   figures line up as the values change. */
+.mb-num {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ───────────────────────── Header ───────────────────────── */
+
+.mb-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+
+.mb-header__text {
+  flex: 1;
+  min-width: 0;
+}
+
+/* ───────────────────────── Bottom nav ───────────────────────── */
+
+.mb-nav {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 30;
+  display: flex;
+  padding-top: 6px;
+  padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 6px);
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+}
+
+.mb-nav__item {
+  flex: 1;
+  min-height: 52px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: 4px 0;
+  background: none;
+  border: 0;
+  cursor: pointer;
+  font-family: var(--font-sans);
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--ink-subtle);
+}
+
+.mb-nav__item[aria-current="page"] {
+  color: var(--ink);
+  font-weight: 650;
+}
+
+.mb-nav__glyph {
+  width: 40px;
+  height: 28px;
+  border-radius: var(--r-pill);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
+}
+
+.mb-nav__item[aria-current="page"] .mb-nav__glyph {
+  background: var(--accent-soft);
+  color: var(--accent-ink);
+}
+
+/* ───────────────────────── Lists ───────────────────────── */
+
+/* The default grouping device: one bordered sheet, hairline-divided rows.
+   Not a card per row. */
+.mb-list {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sheet);
+  overflow: hidden;
+}
+
+.mb-list > * + * {
+  border-top: 1px solid var(--border);
+}
+
+.mb-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  width: 100%;
+  padding: 14px 16px;
+  background: none;
+  border: 0;
+  margin: 0;
+  text-align: left;
+  color: inherit;
+  font: inherit;
+}
+
+button.mb-row {
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease);
+}
+
+button.mb-row:hover {
+  background: var(--surface-muted);
+}
+
+.mb-row--center {
+  align-items: center;
+}
+
+.mb-row--between {
+  align-items: center;
+  justify-content: space-between;
+}
+
+/* Selected option in a single-choice list. */
+.mb-row--on,
+button.mb-row--on:hover {
+  background: var(--accent-soft);
+  color: var(--accent-ink);
+}
+
+/* ───────────────────────── Sheets and empty states ───────────────────────── */
+
+.mb-sheet {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sheet);
+  padding: 18px;
+}
+
+.mb-sheet--accent {
+  background: var(--accent-soft);
+  border-color: transparent;
+}
+
+/* Hairline between figures inside a sheet. */
+.mb-rule {
+  display: block;
+  height: 1px;
+  margin: 10px 0;
+  background: var(--border);
+}
+
+.mb-empty {
+  padding: 28px 22px 32px;
+  text-align: center;
+}
+
+.mb-empty__glyph {
+  width: 48px;
+  height: 48px;
+  margin-bottom: 14px;
+  border-radius: var(--r-control);
+  background: var(--accent-soft);
+  color: var(--accent-ink);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Inline note under a control: explains a filter, a cap, or a caveat. */
+.mb-note {
+  padding: 10px 12px;
+  border-radius: var(--r-chip);
+  background: var(--surface-muted);
+  font-family: var(--font-sans);
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--ink-muted);
+}
+
+.mb-note--accent { background: var(--accent-soft); color: var(--accent-ink); }
+.mb-note--ok { background: var(--ok-soft); color: var(--ok-ink); }
+.mb-note--warn { background: var(--warn-soft); color: var(--warn-ink); }
+.mb-note--bad { background: var(--bad-soft); color: var(--bad-ink); }
+
+.mb-disclaimer {
+  padding: 10px 12px;
+  border-radius: var(--r-chip);
+  background: var(--surface-muted);
+  border: 1px solid var(--border);
+  font-family: var(--font-sans);
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--ink-muted);
+}
+
+/* ───────────────────────── Buttons ───────────────────────── */
+
+.mb-btn {
+  min-height: 44px;
+  padding: 0 18px;
+  border-radius: var(--r-control);
+  border: 1px solid transparent;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  white-space: nowrap;
+  font-family: var(--font-sans);
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: -0.1px;
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease), transform var(--dur-fast) var(--ease);
+}
+
+.mb-btn:active:not(:disabled) { transform: scale(0.98); }
+.mb-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+.mb-btn--primary { background: var(--ink); color: var(--surface); border-color: var(--ink); }
+.mb-btn--accent { background: var(--accent-strong); color: #fff; border-color: var(--accent-strong); }
+.mb-btn--secondary { background: var(--surface); color: var(--ink); border-color: var(--border-strong); }
+.mb-btn--ghost { background: transparent; color: var(--ink); }
+.mb-btn--danger { background: transparent; color: var(--bad-ink); }
+
+.mb-btn--sm { min-height: 36px; padding: 0 12px; font-size: 13px; }
+.mb-btn--lg { min-height: 52px; padding: 0 22px; font-size: 15px; }
+.mb-btn--full { width: 100%; }
+
+/* Square icon-only control. 44px keeps it a comfortable touch target. */
+.mb-iconbtn {
+  width: 44px;
+  height: 44px;
+  flex-shrink: 0;
+  border-radius: var(--r-control);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--ink);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease), transform var(--dur-fast) var(--ease);
+}
+
+.mb-iconbtn:active:not(:disabled) { transform: scale(0.98); }
+.mb-iconbtn:disabled { opacity: 0.45; cursor: not-allowed; }
+.mb-iconbtn--solid { background: var(--ink); color: var(--surface); border-color: var(--ink); }
+.mb-iconbtn--round { border-radius: var(--r-pill); }
+
+/* ───────────────────────── Chips ───────────────────────── */
+
+.mb-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 7px;
+  border-radius: var(--r-chip);
+  border: 1px solid transparent;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.5;
+  white-space: nowrap;
+}
+
+.mb-chip--neutral { background: var(--surface-muted); color: var(--ink-muted); border-color: var(--border); }
+.mb-chip--accent { background: var(--accent-soft); color: var(--accent-ink); }
+.mb-chip--ok { background: var(--ok-soft); color: var(--ok-ink); }
+.mb-chip--warn { background: var(--warn-soft); color: var(--warn-ink); }
+.mb-chip--bad { background: var(--bad-soft); color: var(--bad-ink); }
+
+/* ───────────────────────── Toggles and filters ───────────────────────── */
+
+/* A horizontal row of mutually exclusive filters. Pills are allowed here
+   because the control really is a switch. */
+.mb-filters {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+  scrollbar-width: none;
+}
+
+.mb-filters::-webkit-scrollbar { display: none; }
+
+.mb-filter {
+  flex-shrink: 0;
+  min-height: 44px;
+  padding: 0 14px;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--ink-muted);
+  font-family: var(--font-sans);
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
+}
+
+.mb-filter[aria-pressed="true"] {
+  background: var(--ink);
+  color: var(--surface);
+  border-color: var(--ink);
+}
+
+/* Two-option switch inside a row (for example in-hospital vs out-of-hospital). */
+.mb-segment {
+  display: flex;
+  width: fit-content;
+  padding: 3px;
+  gap: 2px;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--border);
+  background: var(--bg);
+}
+
+.mb-segment__opt {
+  min-height: 36px;
+  padding: 0 14px;
+  border-radius: var(--r-pill);
+  border: 0;
+  background: transparent;
+  color: var(--ink-muted);
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
+}
+
+.mb-segment__opt[aria-pressed="true"] {
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: var(--shadow-1);
+}
+
+/* ───────────────────────── Fields ───────────────────────── */
+
+.mb-field {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 48px;
+  padding: 0 14px;
+  border-radius: var(--r-control);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--ink-subtle);
+}
+
+.mb-field:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.mb-field--invalid { border-color: var(--warn); }
+
+.mb-input {
+  flex: 1;
+  min-width: 0;
+  background: none;
+  border: 0;
+  outline: none;
+  font-family: var(--font-sans);
+  /* 16px minimum stops iOS Safari zooming the viewport on focus. */
+  font-size: 16px;
+  color: var(--ink);
+}
+
+.mb-input::placeholder { color: var(--ink-subtle); }
+
+/* Clear control inside a field, sized as its own touch target. */
+.mb-field__clear {
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+  border: 0;
+  border-radius: var(--r-chip);
+  background: transparent;
+  color: var(--ink-subtle);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.mb-field__clear:hover { color: var(--ink); }
+
+/* Composer: the chat input plus its send control. */
+.mb-composer {
+  padding: 10px 14px;
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.mb-composer__field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 4px 4px 14px;
+  border-radius: var(--r-sheet);
+  border: 1px solid var(--border);
+  background: var(--surface-muted);
+}
+
+.mb-composer__field:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+/* ───────────────────────── Dock ───────────────────────── */
+
+/* A summary bar pinned above the nav. Opaque: a blurred bar costs a GPU
+   repaint on every scroll frame in the Android WebView. */
+.mb-dock {
+  position: absolute;
+  left: 0;
+  right: 0;
+  z-index: 20;
+  padding: 14px 16px;
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  box-shadow: var(--shadow-dock);
+}
+
+/* ───────────────────────── Chat ───────────────────────── */
+
+.mb-bubble {
+  max-width: 86%;
+  padding: 11px 14px;
+  font-family: var(--font-sans);
+  font-size: 14.5px;
+  line-height: 1.5;
+}
+
+.mb-bubble--user {
+  margin-left: auto;
+  background: var(--ink);
+  color: var(--surface);
+  border-radius: var(--r-sheet) var(--r-sheet) 4px var(--r-sheet);
+}
+
+.mb-bubble--bot {
+  flex: 1;
+  min-width: 0;
+  max-width: none;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--ink);
+  border-radius: var(--r-sheet) var(--r-sheet) var(--r-sheet) 4px;
+}
+
+/* A request that came back as an error, rather than an answer. */
+.mb-bubble--failed {
+  background: var(--bad-soft);
+  border-color: var(--bad);
+  color: var(--bad-ink);
+}
+
+.mb-bubble--bot a { color: var(--accent-ink); }
+
+.mb-bubble--bot code {
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+  padding: 1px 4px;
+  border-radius: 4px;
+  background: var(--surface-muted);
+}
+
+/* Headings inside a streamed answer. The model emits markdown; these keep it
+   on the app's type scale instead of the browser defaults. */
+.mb-bubble--bot h2,
+.mb-bubble--bot h3,
+.mb-bubble--bot h4 {
+  font-family: var(--font-display);
+  line-height: 1.25;
+  margin: 12px 0 4px;
+}
+
+.mb-bubble--bot h2 { font-size: 17px; font-weight: 700; }
+.mb-bubble--bot h3 { font-size: 15.5px; font-weight: 700; }
+.mb-bubble--bot h4 { font-size: 14px; font-weight: 650; }
+.mb-bubble--bot > :first-child { margin-top: 0; }
+
+.mb-bubble--bot hr {
+  border: 0;
+  border-top: 1px solid var(--border);
+  margin: 12px 0;
+}
+
+.mb-avatar {
+  width: 30px;
+  height: 30px;
+  flex-shrink: 0;
+  margin-top: 2px;
+  border-radius: var(--r-chip);
+  background: var(--accent-soft);
+  color: var(--accent-ink);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* The tool trace. A quiet text disclosure, not a glowing badge. */
+.mb-trace > summary {
+  list-style: none;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  font-family: var(--font-sans);
+  font-size: 12px;
+  color: var(--ink-subtle);
+}
+
+.mb-trace > summary::-webkit-details-marker { display: none; }
+.mb-trace > summary:hover { color: var(--ink-muted); }
+
+.mb-trace__step {
+  margin-top: 6px;
+  padding: 8px 10px;
+  border-left: 2px solid var(--border-strong);
+  background: var(--surface-muted);
+  border-radius: 0 var(--r-chip) var(--r-chip) 0;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--ink-muted);
+  word-break: break-word;
+}
+
+/* ───────────────────────── Progress ───────────────────────── */
+
+.mb-track {
+  height: 5px;
+  border-radius: var(--r-pill);
+  background: var(--surface-muted);
+  overflow: hidden;
+}
+
+.mb-track__fill {
+  display: block;
+  height: 100%;
+  border-radius: var(--r-pill);
+  background: var(--accent);
+  transition: width var(--dur) var(--ease);
+}
+
+.mb-track__fill--done { background: var(--ok); }
+
+/* ───────────────────────── Loading ───────────────────────── */
+
+.mb-skeleton {
+  border-radius: 5px;
+  background: var(--surface-muted);
+  animation: mb-pulse 1.4s var(--ease) infinite;
+}
+
+@keyframes mb-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.45; }
+}
+
+/* One orchestrated moment: the screen that just became active fades in.
+   There are no per-element entrance animations. */
+@keyframes mb-screen-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.mb-screen-in { animation: mb-screen-in var(--dur) var(--ease); }
+
+/* ───────────────────────── Accessibility ───────────────────────── */
+
+:where(a, button, summary, input, select, textarea, [tabindex]):focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

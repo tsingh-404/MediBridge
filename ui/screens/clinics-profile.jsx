@@ -6,18 +6,17 @@ const BILLING_LABELS = {
   unknown: 'Billing unknown',
 };
 const BILLING_TAG_KIND = { bulk: 'ok', mixed: 'accent', private: 'warn', unknown: 'neutral' };
-const BILLING_HINTS = {
-  bulk: 'No out-of-pocket cost — provider claims directly from Medicare/OSHC.',
-  mixed: 'Bulk-bills some patients (e.g. concession card holders); others pay a gap.',
-  private: 'You pay upfront. Claim a partial OSHC rebate after.',
-  unknown: 'Billing not recorded — call ahead to confirm.',
+const COVER_LABELS = {
+  single: 'Single',
+  couple: 'Couple',
+  family: 'Family',
+  sole_parent: 'Sole parent',
 };
-const TYPE_STYLE = {
-  GP: { bg: 'oklch(95% 0.03 155)', fg: 'oklch(44% 0.09 155)', glyph: 'G' },
-  Psychology: { bg: 'oklch(95% 0.03 295)', fg: 'oklch(43% 0.08 295)', glyph: 'P' },
-  Pharmacy: { bg: 'oklch(95% 0.03 230)', fg: 'oklch(43% 0.1 230)', glyph: 'Rx' },
-  Psychiatry: { bg: 'oklch(95% 0.03 260)', fg: 'oklch(43% 0.09 260)', glyph: 'Psi' },
-  Hospital: { bg: 'oklch(95% 0.03 210)', fg: 'oklch(43% 0.1 210)', glyph: 'H' },
+const BILLING_HINTS = {
+  bulk: 'No out-of-pocket cost. The provider claims directly from Medicare or OSHC.',
+  mixed: 'Bulk-bills some patients, such as concession card holders. Everyone else pays a gap.',
+  private: 'You pay upfront, then claim a partial OSHC rebate.',
+  unknown: 'Billing is not recorded for these listings. Call ahead to confirm.',
 };
 
 function Clinics() {
@@ -58,113 +57,102 @@ function Clinics() {
   }, [q, filter, billing]);
 
   return (
-    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', background: MB.bg }}>
-      <Header title="Find a clinic" subtitle="Queensland clinics, pharmacies, hospitals" />
-      <div style={{ padding: '14px 16px 8px' }}>
-        <div style={{
-          display: 'flex', alignItems: 'center', gap: 10,
-          background: MB.surface, border: `1px solid ${MB.border}`, borderRadius: 12,
-          padding: '0 14px', height: 46,
-        }}>
-          <Icon.search style={{ color: MB.inkSubtle }} />
+    <div className="mb-screen">
+      <Header title="Find a clinic" subtitle="Queensland clinics, pharmacies, and hospitals" />
+      <div style={{ padding: '14px 16px 10px' }}>
+        <div className="mb-field">
+          <Icon.search />
           <input
-            value={q} onChange={e => setQ(e.target.value)}
-            placeholder="Suburb or postcode (e.g. 4059)"
-            style={{ flex: 1, background: 'none', border: 'none', outline: 'none', fontFamily: MB.sans, fontSize: 16, color: MB.ink }}
+            className="mb-input"
+            value={q}
+            onChange={e => setQ(e.target.value)}
+            placeholder="Suburb or postcode, for example 4059"
+            aria-label="Suburb or postcode"
           />
-          {q && <button onClick={() => setQ('')} style={{ background: 'none', border: 'none', color: MB.inkSubtle, cursor: 'pointer' }}><Icon.x /></button>}
+          {q && (
+            <button type="button" className="mb-field__clear" onClick={() => setQ('')} aria-label="Clear search">
+              <Icon.x />
+            </button>
+          )}
         </div>
-        <div style={{ display: 'flex', gap: 6, marginTop: 10, overflowX: 'auto', paddingBottom: 4 }}>
+
+        <div className="mb-filters" style={{ marginTop: 10 }} role="group" aria-label="Clinic type">
           {types.map(t => (
-            <button key={t} onClick={() => setFilter(t)} style={{
-              flexShrink: 0, height: 34, padding: '0 13px', borderRadius: 99,
-              background: filter === t ? MB.ink : MB.surface,
-              color: filter === t ? '#fff' : MB.inkMuted,
-              border: `1px solid ${filter === t ? MB.ink : MB.border}`,
-              fontFamily: MB.sans, fontSize: 12, fontWeight: 600, cursor: 'pointer',
-            }}>{t}</button>
+            <button key={t} type="button" className="mb-filter" aria-pressed={filter === t} onClick={() => setFilter(t)}>
+              {t}
+            </button>
           ))}
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 8, overflowX: 'auto', paddingBottom: 4 }}>
-          <span style={{ flexShrink: 0, fontFamily: MB.mono, fontSize: 10.5, color: MB.inkSubtle, letterSpacing: 0.4, textTransform: 'uppercase', marginRight: 2 }}>Billing</span>
-          {billingOpts.map(b => {
-            const on = billing === b;
-            const isBulk = b === 'bulk';
-            const label = b === 'All' ? 'All' : (BILLING_LABELS[b] || b);
-            const activeBg = isBulk ? MB.ok : MB.ink;
-            return (
-              <button key={b} onClick={() => setBilling(b)} style={{
-                flexShrink: 0, height: 28, padding: '0 11px', borderRadius: 99,
-                background: on ? activeBg : MB.surface,
-                color: on ? '#fff' : (isBulk ? MB.ok : MB.inkMuted),
-                border: `1px solid ${on ? activeBg : (isBulk ? MB.ok : MB.border)}`,
-                fontFamily: MB.sans, fontSize: 11.5, fontWeight: 600, cursor: 'pointer',
-                display: 'inline-flex', alignItems: 'center', gap: 4,
-              }}>
-                {isBulk && <span style={{ fontSize: 10 }}>★</span>}
-                {label}
-              </button>
-            );
-          })}
+
+        <p className="mb-meta" style={{ marginTop: 10 }}>Billing</p>
+        <div className="mb-filters" style={{ marginTop: 6 }} role="group" aria-label="Billing type">
+          {billingOpts.map(b => (
+            <button key={b} type="button" className="mb-filter" aria-pressed={billing === b} onClick={() => setBilling(b)}>
+              {b === 'All' ? 'All' : (BILLING_LABELS[b] || b)}
+            </button>
+          ))}
         </div>
+
         {billing !== 'All' && BILLING_HINTS[billing] && (
-          <div style={{ marginTop: 8, padding: '8px 12px', background: billing === 'bulk' ? MB.okSoft : MB.surfaceMuted, borderRadius: 10, fontFamily: MB.sans, fontSize: 11.5, color: billing === 'bulk' ? MB.ok : MB.inkMuted, lineHeight: 1.45 }}>
+          <p className={`mb-note${billing === 'bulk' ? ' mb-note--ok' : ''}`} style={{ marginTop: 10 }}>
             {BILLING_HINTS[billing]}
-          </div>
+          </p>
         )}
       </div>
-      <div style={{ flex: 1, overflow: 'auto', padding: '6px 16px 100px' }}>
+
+      <div className="mb-scroll" style={{ padding: '6px 16px 96px' }}>
         {!q.trim() && (
-          <div style={{ padding: 24, textAlign: 'center', fontFamily: MB.sans, fontSize: 13, color: MB.inkSubtle }}>
-            Enter a postcode or suburb to search.
+          <p className="mb-sub" style={{ padding: '20px 4px', textAlign: 'center' }}>
+            Enter a suburb or postcode to see clinics near you.
+          </p>
+        )}
+        {loading && (
+          <div className="mb-list" aria-label="Searching" role="status">
+            {[0, 1, 2, 3].map(i => (
+              <div key={i} className="mb-row" style={{ flexDirection: 'column', gap: 8 }}>
+                <Skeleton width={i % 2 ? '56%' : '72%'} height={14} />
+                <Skeleton width="84%" height={11} />
+              </div>
+            ))}
           </div>
         )}
-        {loading && <div style={{ padding: 12, fontFamily: MB.sans, fontSize: 13, color: MB.inkSubtle }}>Searching…</div>}
-        {err && <div style={{ padding: 12, fontFamily: MB.sans, fontSize: 13, color: MB.bad }}>{err}</div>}
+        {err && (
+          <p className="mb-note mb-note--bad">Clinic search failed: {err}. Check your connection and try again.</p>
+        )}
         {!loading && q.trim() && rows.length === 0 && !err && (
-          <div style={{ padding: 24, textAlign: 'center', fontFamily: MB.sans, fontSize: 13, color: MB.inkSubtle }}>
-            No clinics match.
+          <p className="mb-sub" style={{ padding: '20px 4px', textAlign: 'center' }}>
+            No clinics match those filters. Try a nearby postcode, or set the type back to All.
+          </p>
+        )}
+        {!loading && rows.length > 0 && (
+          <div className="mb-list">
+            {rows.map((c, i) => {
+              const billingKey = (c.billing || '').toLowerCase();
+              return (
+                <div key={i} className="mb-row" style={{ flexDirection: 'column', gap: 4 }}>
+                  <p className="mb-body" style={{ fontWeight: 600 }}>{c.name}</p>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                    {c.type && <Tag>{c.type}</Tag>}
+                    {c.billing && (
+                      <Tag kind={BILLING_TAG_KIND[billingKey] || 'neutral'}>
+                        {BILLING_LABELS[billingKey] || c.billing}
+                      </Tag>
+                    )}
+                  </div>
+                  {/* The scraped address already ends in the suburb and postcode,
+                      so only fall back to them when it is missing. */}
+                  {c.address ? (
+                    <p className="mb-sub" style={{ fontSize: 12.5 }}>{c.address}</p>
+                  ) : (
+                    <p className="mb-num" style={{ fontSize: 11, color: MB.inkSubtle }}>
+                      {c.suburb} · {c.postcode}
+                    </p>
+                  )}
+                </div>
+              );
+            })}
           </div>
         )}
-        {rows.map((c, i) => (
-          (() => {
-            const topType = (c.type || '').split(',')[0]?.trim();
-            const typeStyle = TYPE_STYLE[topType] || { bg: MB.accentSoft, fg: MB.accentInk, glyph: 'C' };
-            const isBulk = (c.billing || '').toLowerCase() === 'bulk';
-            return (
-          <div key={i} style={{
-            background: MB.surface, border: `1px solid ${MB.border}`,
-            borderRadius: 12, padding: '12px 14px', marginBottom: 8,
-            display: 'flex', gap: 12, alignItems: 'flex-start',
-            boxShadow: MB.shadow,
-            borderLeft: isBulk ? `4px solid ${MB.ok}` : `1px solid ${MB.border}`,
-            animation: `fadeInUp ${MB.durationFast} ${MB.ease}`,
-          }}>
-            <div style={{
-              width: 38, height: 38, borderRadius: 10, background: typeStyle.bg, color: typeStyle.fg,
-              display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-              fontFamily: MB.mono, fontSize: 10, fontWeight: 700,
-            }}>{typeStyle.glyph}</div>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 3, flexWrap: 'wrap' }}>
-                <span style={{ fontFamily: MB.sans, fontSize: 14, color: MB.ink, fontWeight: 600 }}>{c.name}</span>
-                {c.type && <Tag size="xs">{c.type}</Tag>}
-                {c.billing && (
-                  <Tag size="xs" kind={BILLING_TAG_KIND[c.billing.toLowerCase()] || 'neutral'}>
-                    {BILLING_LABELS[c.billing.toLowerCase()] || c.billing}
-                  </Tag>
-                )}
-                {isBulk && <Tag size="xs" kind="ok">Top pick</Tag>}
-              </div>
-              {c.address && <div style={{ fontFamily: MB.sans, fontSize: 12.5, color: MB.inkMuted, lineHeight: 1.4 }}>{c.address}</div>}
-              <div style={{ fontFamily: MB.mono, fontSize: 11, color: MB.inkSubtle, marginTop: 2 }}>
-                {c.suburb} · {c.postcode}
-              </div>
-            </div>
-          </div>
-            );
-          })()
-        ))}
       </div>
     </div>
   );
@@ -174,31 +162,35 @@ function Profile({ profile, onReset }) {
   const [confirmingReset, setConfirmingReset] = useState(false);
 
   useBackHandler(confirmingReset, () => setConfirmingReset(false));
-  const initials = (profile.insurer?.name || 'S').split(/\s+/).slice(0, 2).map(s => s[0]).join('').toUpperCase();
+  const initials = (profile.insurer?.name || 'MB').split(/\s+/).slice(0, 2).map(s => s[0]).join('').toUpperCase();
   const start = new Date(profile.date);
   const elapsedMonths = Math.max((Date.now() - start.getTime()) / (1000 * 60 * 60 * 24 * 30.4375), 0);
   const waitingRows = [
-    { label: 'GP / outpatient', months: 0 },
+    { label: 'GP and outpatient', months: 0 },
     { label: 'Hospital', months: 2 },
-    { label: 'Pre-existing', months: 12 },
+    { label: 'Pre-existing conditions', months: 12 },
     { label: 'Pregnancy', months: 12 },
   ];
   const pct = (months) => months === 0 ? 100 : Math.min((elapsedMonths / months) * 100, 100);
+
   return (
-    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', background: MB.bg }}>
+    <div className="mb-screen">
       <Header title="Your profile" />
-      <div style={{ flex: 1, overflow: 'auto', padding: '16px 16px 100px' }}>
-        <div style={{
-          background: MB.gradientHero, border: `1px solid ${MB.border}`, borderRadius: 14,
-          padding: 18, marginBottom: 16, boxShadow: MB.shadowMd,
-        }}>
-          <div style={{
-            width: 56, height: 56, borderRadius: 99, background: MB.surface, color: MB.accentInk,
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontFamily: MB.sans, fontSize: 22, fontWeight: 600, marginBottom: 12,
-          }}>{initials}</div>
-          <div style={{ fontFamily: MB.sans, fontSize: 18, fontWeight: 650, color: MB.ink }}>Student</div>
-          <div style={{ fontFamily: MB.sans, fontSize: 13, color: MB.inkMuted, marginTop: 2 }}>Onboarded · {profile.date}</div>
+      <div className="mb-scroll" style={{ padding: '16px 16px 96px' }}>
+        <div className="mb-sheet" style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 20 }}>
+          <span
+            aria-hidden="true"
+            style={{
+              width: 52, height: 52, flexShrink: 0, borderRadius: MB.rPill,
+              background: MB.accentSoft, color: MB.accentInk,
+              display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+              fontFamily: MB.sans, fontSize: 18, fontWeight: 650,
+            }}
+          >{initials}</span>
+          <div style={{ minWidth: 0 }}>
+            <p className="mb-lede" style={{ fontSize: 18 }}>{profile.insurer.name}</p>
+            <p className="mb-sub" style={{ marginTop: 2 }}>{profile.tier.name}</p>
+          </div>
         </div>
 
         <Section label="OSHC policy">
@@ -206,23 +198,34 @@ function Profile({ profile, onReset }) {
           <Row k="Tier" v={profile.tier.name} />
           <Row k="GP benefit" v={`${profile.tier.gp}%`} />
           <Row k="Specialist benefit" v={`${profile.tier.spec}%`} />
-          <Row k="In‑hospital" v={`${profile.tier.in_hospital ?? 100}%`} />
-          <Row k="Cover type" v={profile.cover} />
-          <Row k="Started" v={profile.date} last />
+          <Row k="In hospital" v={`${profile.tier.in_hospital ?? 100}%`} />
+          <Row k="Cover type" v={COVER_LABELS[profile.cover] || profile.cover} />
+          <Row k="Policy started" v={profile.date} />
         </Section>
 
         <Section label="Waiting periods">
-          {waitingRows.map((row, idx) => {
+          {waitingRows.map((row) => {
             const progress = pct(row.months);
             const done = progress >= 100;
+            const status = row.months === 0 ? 'No wait' : (done ? 'Served' : `${row.months} months`);
             return (
-              <div key={row.label} style={{ padding: '12px 16px', borderBottom: idx === waitingRows.length - 1 ? 'none' : `1px solid ${MB.border}` }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontFamily: MB.sans, fontSize: 13.5 }}>
-                  <span style={{ color: MB.inkMuted }}>{row.label}</span>
-                  <span style={{ color: done ? MB.ok : MB.ink, fontWeight: 600 }}>{row.months} mo</span>
+              <div key={row.label} style={{ padding: '13px 16px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
+                  <span className="mb-sub" style={{ fontSize: 13.5 }}>{row.label}</span>
+                  <span className="mb-sub" style={{ fontSize: 13.5, fontWeight: 600, color: done ? MB.okInk : MB.ink }}>
+                    {status}
+                  </span>
                 </div>
-                <div style={{ marginTop: 6, height: 6, borderRadius: 999, background: MB.surfaceMuted, overflow: 'hidden' }}>
-                  <div style={{ width: `${progress}%`, height: '100%', background: done ? MB.ok : MB.warn, transition: `width ${MB.duration} ${MB.ease}` }} />
+                <div
+                  className="mb-track"
+                  style={{ marginTop: 7 }}
+                  role="progressbar"
+                  aria-valuenow={Math.round(progress)}
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                  aria-label={`${row.label} waiting period`}
+                >
+                  <span className={`mb-track__fill${done ? ' mb-track__fill--done' : ''}`} style={{ width: `${progress}%` }} />
                 </div>
               </div>
             );
@@ -231,23 +234,26 @@ function Profile({ profile, onReset }) {
 
         <Section label="Account">
           {!confirmingReset ? (
-            <button onClick={() => setConfirmingReset(true)} style={{
-              width: '100%', background: 'none', border: 'none', cursor: 'pointer',
-              padding: '14px 16px', textAlign: 'left',
-              fontFamily: MB.sans, fontSize: 14, color: MB.bad, fontWeight: 550,
-            }}>Restart onboarding</button>
+            <button
+              type="button"
+              className="mb-row"
+              style={{ color: MB.badInk, fontFamily: MB.sans, fontSize: 14, fontWeight: 550 }}
+              onClick={() => setConfirmingReset(true)}
+            >
+              Restart onboarding
+            </button>
           ) : (
-            <div style={{ padding: '12px 16px' }}>
-              <div style={{ fontFamily: MB.sans, fontSize: 12.5, color: MB.inkMuted, marginBottom: 10 }}>Are you sure? This will clear your saved profile.</div>
-              <div style={{ display: 'flex', gap: 8 }}>
+            <div style={{ padding: '14px 16px' }}>
+              <p className="mb-sub">This clears your saved profile and starts setup again.</p>
+              <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
                 <Button kind="secondary" size="sm" onClick={() => setConfirmingReset(false)}>Cancel</Button>
-                <Button kind="primary" size="sm" onClick={onReset}>Yes, restart</Button>
+                <Button kind="primary" size="sm" onClick={onReset}>Clear profile</Button>
               </div>
             </div>
           )}
         </Section>
 
-        <Disclaimer style={{ marginBottom: 14 }} />
+        <Disclaimer />
       </div>
     </div>
   );
@@ -255,27 +261,18 @@ function Profile({ profile, onReset }) {
 
 function Section({ label, children }) {
   return (
-    <div style={{ marginBottom: 14 }}>
-      <div style={{
-        fontFamily: MB.mono, fontSize: 10.5, color: MB.inkSubtle,
-        letterSpacing: 0.4, textTransform: 'uppercase', padding: '0 4px 6px',
-      }}>{label}</div>
-      <div style={{ background: MB.surface, border: `1px solid ${MB.border}`, borderRadius: 14, overflow: 'hidden' }}>
-        {children}
-      </div>
-    </div>
+    <section style={{ marginBottom: 20 }}>
+      <h2 className="mb-label">{label}</h2>
+      <div className="mb-list">{children}</div>
+    </section>
   );
 }
 
-function Row({ k, v, last }) {
+function Row({ k, v }) {
   return (
-    <div style={{
-      display: 'flex', justifyContent: 'space-between', padding: '12px 16px',
-      borderBottom: last ? 'none' : `1px solid ${MB.border}`,
-      fontFamily: MB.sans, fontSize: 13.5,
-    }}>
-      <span style={{ color: MB.inkMuted }}>{k}</span>
-      <span style={{ color: MB.ink, fontWeight: 550 }}>{v}</span>
+    <div className="mb-row mb-row--between">
+      <span className="mb-sub" style={{ fontSize: 13.5 }}>{k}</span>
+      <span className="mb-sub" style={{ fontSize: 13.5, fontWeight: 550, color: MB.ink }}>{v}</span>
     </div>
   );
 }

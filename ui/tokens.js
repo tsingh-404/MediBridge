@@ -1,38 +1,44 @@
-// MediBridge design tokens — editorial and confident.
-// Colour tokens resolve to CSS custom properties declared in index.html, which
-// pair an sRGB hex fallback with the oklch() original (see the :root block).
+// MediBridge design tokens.
+//
+// Every value resolves to a CSS custom property declared in the :root block of
+// index.html, which pairs an sRGB hex fallback with the oklch() original. This
+// object exists so the inline styles left in the screens read from the same
+// source as ui/styles.css — component-level styling belongs in the stylesheet.
 window.MB = {
-  bg: '#F5F6F0',
-  surface: '#FFFFFF',
-  surfaceElevated: '#FAFBF7',
-  surfaceMuted: '#EEF0EA',
-  border: '#DBE1DB',
-  borderStrong: '#C8D0C8',
-  ink: '#131714',
-  inkMuted: '#4C5A50',
-  inkSubtle: '#7C8A81',
+  bg: 'var(--bg)',
+  surface: 'var(--surface)',
+  surfaceMuted: 'var(--surface-muted)',
+  border: 'var(--border)',
+  borderStrong: 'var(--border-strong)',
+  ink: 'var(--ink)',
+  inkMuted: 'var(--ink-muted)',
+  inkSubtle: 'var(--ink-subtle)',
+
+  // One accent. accentStrong is the only teal that carries white text.
   accent: 'var(--accent)',
+  accentStrong: 'var(--accent-strong)',
   accentSoft: 'var(--accent-soft)',
   accentInk: 'var(--accent-ink)',
-  highlight: 'var(--highlight)',
-  highlightSoft: 'var(--highlight-soft)',
+
+  // Semantic only. The -Ink variants are the text-safe pair for each fill.
   ok: 'var(--ok)',
-  warn: 'var(--warn)',
-  bad: 'var(--bad)',
+  okInk: 'var(--ok-ink)',
   okSoft: 'var(--ok-soft)',
+  warn: 'var(--warn)',
+  warnInk: 'var(--warn-ink)',
   warnSoft: 'var(--warn-soft)',
+  bad: 'var(--bad)',
+  badInk: 'var(--bad-ink)',
   badSoft: 'var(--bad-soft)',
-  display: '"Cabinet Grotesk", "General Sans", -apple-system, BlinkMacSystemFont, system-ui, sans-serif',
-  sans: '"General Sans", -apple-system, BlinkMacSystemFont, system-ui, sans-serif',
-  mono: '"JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace',
-  gradientHero: 'linear-gradient(140deg, var(--hero-1) 0%, var(--hero-2) 45%, var(--hero-3) 100%)',
-  gradientSoft: 'linear-gradient(180deg, rgba(255,255,255,0.84), rgba(255,255,255,0.58))',
-  shadow: '0 1px 3px rgba(14, 20, 16, 0.08), 0 1px 2px rgba(14, 20, 16, 0.06)',
-  shadowMd: '0 6px 18px rgba(14, 20, 16, 0.09), 0 2px 6px rgba(14, 20, 16, 0.06)',
-  shadowLg: '0 14px 36px rgba(14, 20, 16, 0.12)',
-  ease: 'cubic-bezier(0.22, 1, 0.36, 1)',
-  durationFast: '0.18s',
-  duration: '0.3s',
-  s1: 4, s2: 8, s3: 12, s4: 16, s5: 20, s6: 24, s7: 32, s8: 40,
-  r1: 8, r2: 12, r3: 16, r4: 22,
+
+  display: 'var(--font-display)',
+  sans: 'var(--font-sans)',
+  mono: 'var(--font-mono)',
+
+  shadow: 'var(--shadow-1)',
+  ease: 'var(--ease)',
+  durationFast: 'var(--dur-fast)',
+  duration: 'var(--dur)',
+
+  rChip: 8, rControl: 12, rSheet: 16, rPill: 999,
 };

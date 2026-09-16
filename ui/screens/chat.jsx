@@ -1,4 +1,11 @@
 // Chat / Ask MediBridge — streams SSE events from /api/chat.
+const CHAT_SUGGESTIONS = [
+  'How much does a GP visit cost?',
+  "What's the gap on a specialist?",
+  'Am I covered for pregnancy yet?',
+  'Is dental covered by OSHC?',
+];
+
 function Chat({ profile }) {
   const [input, setInput] = useState('');
   const [messages, setMessages] = useState([{ role: 'assistant', kind: 'intro' }]);
@@ -87,7 +94,10 @@ function Chat({ profile }) {
           },
           onError: (err) => replacePending(_ => ({
             pending: false,
-            text: `Sorry — ${err.message || 'something went wrong'}.`,
+            failed: true,
+            text: err.message
+              ? `That request failed: ${err.message}. Try asking again.`
+              : 'That request failed. Try asking again.',
           })),
         }
       );
@@ -103,81 +113,80 @@ function Chat({ profile }) {
   };
 
   return (
-    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', background: MB.bg }}>
+    <div className="mb-screen">
       <Header
         title="Ask MediBridge"
         subtitle={`${profile.insurer.name} · ${profile.tier.name}`}
-        right={<Tag kind="ok" size="xs">Live</Tag>}
       />
 
-      <div ref={scrollRef} onScroll={onScroll} style={{ flex: 1, overflow: 'auto', padding: '16px 16px 16px', position: 'relative' }}>
-        {messages.map((m, i) => <Message key={i} m={m} profile={profile} onFollowup={send} />)}
+      <div ref={scrollRef} onScroll={onScroll} className="mb-scroll" style={{ padding: 16 }}>
+        {messages.map((m, i) => <Message key={i} m={m} onFollowup={send} />)}
       </div>
+
       {showJump && (
-        <button onClick={jumpBottom} style={{
-          position: 'absolute', right: 16, bottom: 162, zIndex: 18,
-          width: 42, height: 42, borderRadius: 999, border: `1px solid ${MB.border}`,
-          background: MB.surface, boxShadow: MB.shadowMd, color: MB.ink, cursor: 'pointer',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-        }}><Icon.arrow style={{ transform: 'rotate(90deg)' }} /></button>
+        <button
+          type="button"
+          onClick={jumpBottom}
+          aria-label="Jump to latest"
+          className="mb-iconbtn mb-iconbtn--round"
+          style={{ position: 'absolute', right: 16, bottom: 150, zIndex: 18, boxShadow: MB.shadow }}
+        >
+          <Icon.down />
+        </button>
       )}
 
-      <div style={{
-        padding: keyboardOpen
-          ? '10px 14px calc(env(safe-area-inset-bottom, 0px) + 10px)'
-          : '10px 14px calc(env(safe-area-inset-bottom, 0px) + 80px)',
-        borderTop: `1px solid ${MB.border}`, background: MB.surface,
-      }}>
-        <div style={{
-          display: 'flex', alignItems: 'flex-end', gap: 8,
-          background: MB.surfaceMuted, borderRadius: 22, padding: '6px 6px 6px 16px',
-          border: `1px solid ${MB.border}`,
-        }}>
+      <div
+        className="mb-composer"
+        style={{
+          paddingBottom: keyboardOpen
+            ? 'calc(env(safe-area-inset-bottom, 0px) + 10px)'
+            : 'calc(env(safe-area-inset-bottom, 0px) + 80px)',
+        }}
+      >
+        <div className="mb-composer__field">
           <input
+            className="mb-input"
             value={input}
             onChange={e => setInput(e.target.value)}
             onKeyDown={e => { if (e.key === 'Enter') send(input); }}
-            placeholder={streaming ? 'Thinking…' : 'Ask about cover, items, costs…'}
+            placeholder={streaming ? 'Waiting for an answer' : 'Ask about cover, items, costs'}
+            aria-label="Ask a question"
             disabled={streaming}
-            style={{
-              flex: 1, background: 'none', border: 'none', outline: 'none',
-              fontFamily: MB.sans, fontSize: 16, color: MB.ink, padding: '10px 0',
-            }}
           />
           <button
+            type="button"
+            className="mb-iconbtn mb-iconbtn--solid mb-iconbtn--round"
             onClick={() => (streaming ? stop() : send(input))}
             disabled={!streaming && !input.trim()}
             aria-label={streaming ? 'Stop generating' : 'Send'}
-            style={{
-              width: 36, height: 36, borderRadius: 99,
-              background: streaming || input.trim() ? MB.ink : MB.borderStrong,
-              color: '#fff', border: 'none', cursor: 'pointer',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              transition: `background ${MB.durationFast} ${MB.ease}`,
-            }}>{streaming ? <Icon.x /> : <Icon.send />}</button>
+          >
+            {streaming ? <Icon.stop /> : <Icon.send />}
+          </button>
         </div>
       </div>
     </div>
   );
 }
 
-function Message({ m, profile, onFollowup }) {
+function Message({ m, onFollowup }) {
+  // Minimal markdown for streamed answers. Styling for the emitted tags lives
+  // in ui/styles.css under .mb-bubble--bot.
   const renderRich = (raw) => {
     if (!raw) return '';
     let html = raw
       // inline code & links first so emphasis can't clobber their contents
-      .replace(/`([^`]+)`/g, '<code style="font-family:var(--mono,monospace);background:rgba(20,20,20,0.06);padding:1px 4px;border-radius:4px;">$1</code>')
+      .replace(/`([^`]+)`/g, '<code>$1</code>')
       .replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1" target="_blank" rel="noreferrer">$1</a>')
       // bold before italic so the ** pair is consumed first
       .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
       .replace(/\*([^*\n]+)\*/g, '<em>$1</em>')
       .replace(/(^|[\s(])_([^_\n]+)_(?=$|[\s).,!?])/g, '$1<em>$2</em>');
-    // block-level, line-anchored — before newline→<br/>
+    // block-level, line-anchored, before newline -> <br/>
     html = html
-      .replace(/^### (.+)$/gm, '<h4 style="margin:10px 0 4px;font-size:14px;font-weight:650;">$1</h4>')
-      .replace(/^## (.+)$/gm, '<h3 style="margin:12px 0 5px;font-size:15.5px;font-weight:700;">$1</h3>')
-      .replace(/^# (.+)$/gm, '<h2 style="margin:14px 0 6px;font-size:17px;font-weight:700;">$1</h2>')
-      .replace(/^\s*(?:---|\*\*\*)\s*$/gm, '<hr style="border:none;border-top:1px solid rgba(20,20,20,0.12);margin:10px 0;"/>')
+      .replace(/^### (.+)$/gm, '<h4>$1</h4>')
+      .replace(/^## (.+)$/gm, '<h3>$1</h3>')
+      .replace(/^# (.+)$/gm, '<h2>$1</h2>')
+      .replace(/^\s*(?:---|\*\*\*)\s*$/gm, '<hr/>')
       .replace(/^(\d+)\. (.+)$/gm, '<span style="display:inline-block;">$1. $2</span>')
       .replace(/^- (.+)$/gm, '• $1');
     // drop the newline that follows a block element to avoid a double gap
@@ -187,84 +196,58 @@ function Message({ m, profile, onFollowup }) {
 
   if (m.kind === 'intro') {
     return (
-      <div style={{ marginBottom: 16, animation: `fadeInUp ${MB.durationFast} ${MB.ease}` }}>
-        <div style={{
-          background: MB.surface, border: `1px solid ${MB.border}`, borderRadius: 18, padding: 18, boxShadow: MB.shadow,
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-            <div style={{
-              width: 26, height: 26, borderRadius: 8, background: MB.ink,
-              display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff',
-            }}>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M12 3l1.8 5.5L19 10l-5.2 1.5L12 17l-1.8-5.5L5 10l5.2-1.5L12 3z" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round"/></svg>
-            </div>
-            <div style={{ fontFamily: MB.sans, fontSize: 14, fontWeight: 650, color: MB.ink }}>MediBridge</div>
-          </div>
-          <div style={{ fontFamily: MB.sans, fontSize: 15, color: MB.ink, lineHeight: 1.5 }}>
-            G'day. I help international students figure out OSHC cover, MBS items, and out‑of‑pocket costs. Ask me anything in plain English.
-          </div>
-          <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 6 }}>
-            {[
-              'How much does a GP visit cost?',
-              "What's the gap on a specialist?",
-              'Am I covered for pregnancy yet?',
-              'Is dental covered by OSHC?',
-            ].map(s => (
-              <button key={s} onClick={() => onFollowup(s)} style={{
-                background: MB.surfaceMuted, border: `1px solid ${MB.border}`,
-                borderRadius: 10, padding: '10px 12px', textAlign: 'left', cursor: 'pointer',
-                fontFamily: MB.sans, fontSize: 13.5, color: MB.ink,
-                display: 'flex', alignItems: 'center', gap: 8,
-                boxShadow: MB.shadow,
-                transition: `all ${MB.durationFast} ${MB.ease}`,
-              }}>
-                <Icon.spark style={{ color: MB.accent, flexShrink: 0 }} />
-                {s}
-              </button>
-            ))}
-          </div>
+      <div style={{ marginBottom: 20 }}>
+        <div style={{ display: 'flex', gap: 10 }}>
+          <span className="mb-avatar"><Icon.mark size={18} /></span>
+          <p className="mb-bubble mb-bubble--bot">
+            G'day. I help international students work out OSHC cover, MBS items, and
+            out-of-pocket costs. Ask me anything in plain English.
+          </p>
+        </div>
+        <p className="mb-meta" style={{ margin: '16px 0 8px 40px' }}>Try one of these</p>
+        <div className="mb-list" style={{ marginLeft: 40 }}>
+          {CHAT_SUGGESTIONS.map(s => (
+            <button
+              key={s}
+              type="button"
+              className="mb-row mb-row--between"
+              style={{ padding: '12px 14px' }}
+              onClick={() => onFollowup(s)}
+            >
+              <span className="mb-sub" style={{ color: MB.ink }}>{s}</span>
+              <Icon.next size={16} style={{ color: MB.inkSubtle, flexShrink: 0 }} />
+            </button>
+          ))}
         </div>
       </div>
     );
   }
+
   if (m.role === 'user') {
     return (
-      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
-        <div style={{
-          maxWidth: '82%', background: MB.ink, color: '#fff',
-          padding: '10px 14px', borderRadius: '18px 18px 4px 18px',
-          fontFamily: MB.sans, fontSize: 14.5, lineHeight: 1.45,
-          animation: `fadeInUp ${MB.durationFast} ${MB.ease}`,
-        }}>{m.text}</div>
+      <div style={{ display: 'flex', marginBottom: 14 }}>
+        <p className="mb-bubble mb-bubble--user">{m.text}</p>
       </div>
     );
   }
+
   const thinking = m.thinking || [];
   const text = m.text || '';
   return (
-    <div style={{ marginBottom: 18, animation: `fadeInUp ${MB.durationFast} ${MB.ease}` }}>
+    <div style={{ marginBottom: 20 }}>
       {thinking.length > 0 && (
-        <details style={{ marginBottom: 8 }} open={!!m.pending}>
-          <summary style={{
-            cursor: 'pointer', listStyle: 'none',
-            display: 'inline-flex', alignItems: 'center', gap: 6,
-            fontFamily: MB.mono, fontSize: 11, color: MB.inkSubtle,
-            background: MB.accentSoft, padding: '4px 10px', borderRadius: 99,
-            border: `1px solid ${MB.border}`,
-          }}>
-            <Icon.spark style={{ color: MB.accent }} />
-            <span>{m.pending ? 'Using' : 'Used'} {thinking.length} tool{thinking.length > 1 ? 's' : ''}</span>
+        <details className="mb-trace" style={{ marginBottom: 8, marginLeft: 40 }} open={!!m.pending}>
+          <summary>
+            <Icon.down size={14} />
+            {m.pending ? 'Looking things up' : `Checked ${thinking.length} source${thinking.length > 1 ? 's' : ''}`}
           </summary>
-          <div style={{ marginTop: 6, paddingLeft: 4 }}>
+          <div>
             {thinking.map((t, i) => (
-              <div key={i} style={{
-                fontFamily: MB.mono, fontSize: 11, color: MB.inkMuted,
-                padding: '6px 10px', background: MB.gradientSoft,
-                borderLeft: `2px solid ${MB.accent}`, marginBottom: 4,
-                borderRadius: '0 6px 6px 0', lineHeight: 1.5, wordBreak: 'break-word',
-              }}>
-                <div><span style={{ color: MB.accentInk, fontWeight: 600 }}>{t.tool}</span>({t.args})</div>
-                <div style={{ color: MB.inkSubtle, marginTop: 2 }}>→ {t.result == null ? 'running…' : t.result}</div>
+              <div key={i} className="mb-trace__step">
+                <span style={{ color: MB.accentInk, fontWeight: 600 }}>{t.tool}</span>({t.args})
+                <span style={{ display: 'block', color: MB.inkSubtle, marginTop: 2 }}>
+                  {t.result == null ? 'running' : t.result}
+                </span>
               </div>
             ))}
           </div>
@@ -272,24 +255,21 @@ function Message({ m, profile, onFollowup }) {
       )}
 
       {(text || m.pending) && (
-        <div style={{
-          display: 'flex', alignItems: 'flex-start', gap: 8,
-        }}>
-          <div style={{
-            width: 28, height: 28, borderRadius: 8, background: MB.gradientHero, color: MB.accentInk, flexShrink: 0,
-            display: 'flex', alignItems: 'center', justifyContent: 'center', marginTop: 4,
-          }}><Icon.spark /></div>
-          <div
-            style={{
-              background: MB.surface, border: `1px solid ${MB.border}`, borderRadius: '18px 18px 18px 4px',
-              padding: '12px 14px', fontFamily: MB.sans, fontSize: 14.5, color: MB.ink, lineHeight: 1.5, flex: 1, minWidth: 0,
-            }}
-            dangerouslySetInnerHTML={{
-              __html: text
-                ? renderRich(text)
-                : '<span style="display:inline-flex;align-items:center;gap:4px;color:#8893A0"><span style="width:6px;height:6px;border-radius:999px;background:#8893A0;animation:pulse 1s ease-in-out infinite"></span><span style="width:6px;height:6px;border-radius:999px;background:#8893A0;animation:pulse 1s .15s ease-in-out infinite"></span><span style="width:6px;height:6px;border-radius:999px;background:#8893A0;animation:pulse 1s .3s ease-in-out infinite"></span></span>',
-            }}
-          />
+        <div style={{ display: 'flex', gap: 10 }}>
+          <span className="mb-avatar"><Icon.mark size={18} /></span>
+          {text ? (
+            <div
+              className={`mb-bubble mb-bubble--bot${m.failed ? ' mb-bubble--failed' : ''}`}
+              dangerouslySetInnerHTML={{ __html: renderRich(text) }}
+            />
+          ) : (
+            // The answer takes the shape of the text about to replace it.
+            <div className="mb-bubble mb-bubble--bot" aria-label="Writing an answer" role="status">
+              <Skeleton width="92%" height={11} />
+              <Skeleton width="100%" height={11} style={{ marginTop: 7 }} />
+              <Skeleton width="64%" height={11} style={{ marginTop: 7 }} />
+            </div>
+          )}
         </div>
       )}
     </div>

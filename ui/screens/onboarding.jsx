@@ -1,4 +1,4 @@
-// Onboarding wizard — 4 steps. Insurers loaded from /api/insurers.
+// Onboarding wizard — welcome + 4 steps. Insurers loaded from /api/insurers.
 function Onboarding({ onDone }) {
   const [step, setStep] = useState(0);
   const [insurers, setInsurers] = useState(null);
@@ -38,177 +38,200 @@ function Onboarding({ onDone }) {
     }
   };
 
+  const titles = [
+    'Welcome to MediBridge',
+    'Who do you have OSHC with?',
+    'Which tier are you on?',
+    'When did your policy start?',
+    'Cover type?',
+  ];
+  const blurbs = [
+    'Your OSHC assistant for cover checks, costs, and clinic decisions.',
+    'We use this to show your real benefit percentages and exclusions.',
+    "You'll find this on your membership card or welcome email.",
+    'Used to check waiting periods.',
+    'Affects pricing and dependants.',
+  ];
+
   return (
-    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', background: MB.bg }}>
+    <div className="mb-screen">
       <div style={{ padding: 'calc(env(safe-area-inset-top, 0px) + 24px) 20px 0' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 20 }}>
+        <div
+          style={{ display: 'flex', gap: 6, marginBottom: 22 }}
+          role="progressbar"
+          aria-valuenow={step}
+          aria-valuemin={0}
+          aria-valuemax={total - 1}
+          aria-label={`Setup step ${step} of ${total - 1}`}
+        >
           {Array.from({ length: total - 1 }).map((_, i) => (
-            <div key={i} style={{
-              flex: 1, height: 6, borderRadius: 99,
+            <span key={i} style={{
+              flex: 1, height: 4, borderRadius: 999,
               background: i < step ? MB.accent : MB.border,
-              boxShadow: i < step ? MB.shadow : 'none',
-              transition: `all ${MB.duration} ${MB.ease}`,
+              transition: `background ${MB.duration} ${MB.ease}`,
             }} />
           ))}
         </div>
-        <div style={{ fontFamily: MB.mono, fontSize: 11, color: MB.inkSubtle, letterSpacing: 0.4, textTransform: 'uppercase' }}>
-          {step === 0 ? 'Welcome' : `Step ${step} of ${total - 1}`}
-        </div>
-        <div style={{ fontFamily: MB.display, fontSize: 30, fontWeight: 700, color: MB.ink, letterSpacing: -0.8, marginTop: 4, lineHeight: 1.15 }}>
-          {step === 0 && 'Welcome to MediBridge'}
-          {step === 1 && 'Who do you have OSHC with?'}
-          {step === 2 && 'Which tier are you on?'}
-          {step === 3 && 'When did your policy start?'}
-          {step === 4 && 'Cover type?'}
-        </div>
-        <div style={{ fontFamily: MB.sans, fontSize: 14, color: MB.inkMuted, marginTop: 8, lineHeight: 1.45 }}>
-          {step === 0 && 'Your personal OSHC assistant for cover checks, costs, and smarter clinic decisions.'}
-          {step === 1 && 'We use this to show your real benefit % and exclusions.'}
-          {step === 2 && 'You\'ll find this on your membership card or welcome email.'}
-          {step === 3 && 'Used to check waiting periods.'}
-          {step === 4 && 'Affects pricing and dependants.'}
-        </div>
+        <h1 className="mb-headline">{titles[step]}</h1>
+        <p className="mb-sub" style={{ marginTop: 10, fontSize: 14 }}>{blurbs[step]}</p>
       </div>
 
-      <div key={step} style={{ flex: 1, overflow: 'auto', padding: '20px 20px 0', animation: `fadeInUp ${MB.durationFast} ${MB.ease}` }}>
+      <div
+        key={step}
+        className="mb-scroll mb-screen-in"
+        style={{ padding: '20px 20px 0', display: 'flex', flexDirection: 'column' }}
+      >
         {step === 0 && (
-          <div style={{
-            background: MB.gradientHero, border: `1px solid ${MB.border}`, borderRadius: 18, boxShadow: MB.shadowMd,
-            padding: '22px 20px',
-          }}>
-            <div style={{
-              width: 58, height: 58, borderRadius: 16, background: MB.surface, color: MB.accentInk,
-              display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: MB.shadow, marginBottom: 14,
-            }}>
-              <Icon.spark />
+          // Centred with auto margins rather than justify-content, so a short
+          // viewport can still scroll to the top of the block.
+          <div style={{ marginTop: 'auto', marginBottom: 'auto' }}>
+            <div className="mb-sheet mb-sheet--accent">
+              <span
+                style={{
+                  width: 52, height: 52, borderRadius: MB.rControl, background: MB.surface,
+                  color: MB.accentInk, display: 'inline-flex', alignItems: 'center',
+                  justifyContent: 'center', marginBottom: 16,
+                }}
+              >
+                <Icon.mark size={28} />
+              </span>
+              <p className="mb-lede">Know what a visit costs before you go.</p>
+              <p className="mb-sub" style={{ marginTop: 10, color: MB.accentInk }}>
+                Setting up your insurer takes about a minute, and it makes every answer
+                and cost estimate match your actual OSHC tier.
+              </p>
             </div>
-            <div style={{ fontFamily: MB.display, fontSize: 24, color: MB.ink, fontWeight: 700, lineHeight: 1.1 }}>
-              Understand your cover
-              <br />
-              before you spend.
-            </div>
-            <div style={{ fontFamily: MB.sans, fontSize: 14, color: MB.inkMuted, marginTop: 10, lineHeight: 1.45 }}>
-              We will set up your insurer profile in under a minute so your chat answers and cost calculations match your actual OSHC tier.
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 14, padding: '22px 4px 0' }}>
+              {[
+                [Icon.chat, 'Ask anything about your cover in plain English'],
+                [Icon.costs, 'Work out the gap on a bill before you pay it'],
+                [Icon.clinic, 'Find bulk-billing clinics near your suburb'],
+              ].map(([I, text]) => (
+                <div key={text} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <I size={19} style={{ color: MB.accent, flexShrink: 0 }} />
+                  <p className="mb-sub">{text}</p>
+                </div>
+              ))}
             </div>
           </div>
         )}
-        {loadErr && (
-          <div style={{ padding: 14, background: MB.badSoft, borderRadius: 12, color: MB.bad, fontFamily: MB.sans, fontSize: 13 }}>
-            Couldn't load insurers: {loadErr}
-          </div>
+
+        {loadErr && step > 0 && step < 3 && (
+          <p className="mb-note mb-note--bad">Couldn't load insurers: {loadErr}</p>
         )}
-        {!insurers && !loadErr && (
-          <div style={{ fontFamily: MB.sans, fontSize: 13, color: MB.inkSubtle }}>Loading insurers…</div>
+        {!insurers && !loadErr && step > 0 && step < 3 && (
+          <div className="mb-list" aria-hidden="true">
+            {[0, 1, 2, 3].map(i => (
+              <div key={i} className="mb-row"><Skeleton width={i % 2 ? '52%' : '68%'} height={15} /></div>
+            ))}
+          </div>
         )}
 
         {insurers && step === 1 && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <div className="mb-list">
             {insurers.map(ins => {
               const on = insurer?.id === ins.id;
               return (
-                <button key={ins.id} onClick={() => { setInsurer(ins); setTier(ins.tiers[0] || null); }} style={{
-                  background: on ? MB.accentSoft : MB.surface, color: MB.ink,
-                  border: `1px solid ${on ? MB.accent : MB.border}`, borderRadius: 14,
-                  padding: '16px 18px', textAlign: 'left', cursor: 'pointer',
-                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                  fontFamily: MB.sans, fontSize: 15, fontWeight: 550,
-                  boxShadow: on ? MB.shadowMd : MB.shadow,
-                  transform: on ? 'scale(1.01)' : 'none',
-                  transition: `all ${MB.durationFast} ${MB.ease}`,
-                }}>
-                  <span>{ins.name}</span>
+                <button
+                  key={ins.id}
+                  type="button"
+                  className={`mb-row mb-row--between${on ? ' mb-row--on' : ''}`}
+                  aria-pressed={on}
+                  onClick={() => { setInsurer(ins); setTier(ins.tiers[0] || null); }}
+                >
+                  <span className="mb-body" style={{ fontWeight: 550, color: 'inherit' }}>{ins.name}</span>
                   {on && <Icon.check />}
                 </button>
               );
             })}
           </div>
         )}
+
         {insurers && step === 2 && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <div className="mb-list">
             {(insurer?.tiers || []).map(t => {
               const on = tier?.id === t.id;
               return (
-                <button key={t.id} onClick={() => setTier(t)} style={{
-                  background: on ? MB.accentSoft : MB.surface, color: MB.ink,
-                  border: `1px solid ${on ? MB.accent : MB.border}`, borderRadius: 14,
-                  padding: '16px 18px', textAlign: 'left', cursor: 'pointer',
-                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                  fontFamily: MB.sans, fontSize: 15, fontWeight: 550,
-                  boxShadow: on ? MB.shadowMd : MB.shadow,
-                  transform: on ? 'scale(1.01)' : 'none',
-                  transition: `all ${MB.durationFast} ${MB.ease}`,
-                }}>
-                  <div>
-                    <div>{t.name}</div>
-                    <div style={{ fontFamily: MB.mono, fontSize: 11, marginTop: 4, opacity: 0.7 }}>
+                <button
+                  key={t.id}
+                  type="button"
+                  className={`mb-row mb-row--between${on ? ' mb-row--on' : ''}`}
+                  aria-pressed={on}
+                  onClick={() => setTier(t)}
+                >
+                  <span>
+                    <span className="mb-body" style={{ fontWeight: 550, color: 'inherit', display: 'block' }}>{t.name}</span>
+                    <span className="mb-num" style={{ fontSize: 11.5, opacity: 0.75 }}>
                       GP {t.gp}% · Specialist {t.spec}%
-                    </div>
-                  </div>
+                    </span>
+                  </span>
                   {on && <Icon.check />}
                 </button>
               );
             })}
           </div>
         )}
+
         {step === 3 && (
           <div>
-            <div style={{
-              width: '100%', height: 56, boxSizing: 'border-box',
-              borderRadius: 14, border: `1px solid ${MB.border}`,
-              background: MB.surface, overflow: 'hidden',
-              display: 'flex', alignItems: 'center',
-            }}>
-              <input type="date" value={date} onChange={e => setDate(e.target.value)} style={{
-                flex: 1, width: 0, minWidth: 0, height: '100%',
-                boxSizing: 'border-box', border: 'none', background: 'transparent',
-                padding: '0 16px', fontFamily: MB.sans, fontSize: 17,
-                color: MB.ink, outline: 'none', textAlign: 'center',
-              }} />
+            <div className="mb-field" style={{ minHeight: 56 }}>
+              <input
+                type="date"
+                className="mb-input"
+                value={date}
+                onChange={e => setDate(e.target.value)}
+                aria-label="Policy start date"
+                style={{ fontSize: 17, textAlign: 'center' }}
+              />
             </div>
-            <div style={{ marginTop: 12, padding: '12px 14px', background: MB.accentSoft, borderRadius: 10, fontFamily: MB.sans, fontSize: 12.5, color: MB.accentInk, lineHeight: 1.5 }}>
-              Most waiting periods are 2 months for hospital, 12 months for pre‑existing conditions and pregnancy. GP visits and ambulance have no wait.
-            </div>
+            <p className="mb-note mb-note--accent" style={{ marginTop: 12 }}>
+              Most waiting periods are 2 months for hospital, and 12 months for
+              pre-existing conditions and pregnancy. GP visits and ambulance have no wait.
+            </p>
           </div>
         )}
+
         {step === 4 && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <div className="mb-list">
             {[
               { id: 'single', name: 'Single', sub: 'Just me' },
               { id: 'couple', name: 'Couple', sub: 'Me and my partner' },
-              { id: 'family', name: 'Family', sub: 'Two adults + dependants' },
-              { id: 'sole_parent', name: 'Sole parent', sub: 'One adult + dependants' },
+              { id: 'family', name: 'Family', sub: 'Two adults plus dependants' },
+              { id: 'sole_parent', name: 'Sole parent', sub: 'One adult plus dependants' },
             ].map(c => {
               const on = cover === c.id;
               return (
-                <button key={c.id} onClick={() => setCover(c.id)} style={{
-                  background: on ? MB.accentSoft : MB.surface, color: MB.ink,
-                  border: `1px solid ${on ? MB.accent : MB.border}`, borderRadius: 14,
-                  padding: '16px 18px', textAlign: 'left', cursor: 'pointer',
-                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                  fontFamily: MB.sans, fontSize: 15, fontWeight: 550,
-                  boxShadow: on ? MB.shadowMd : MB.shadow,
-                  transform: on ? 'scale(1.01)' : 'none',
-                  transition: `all ${MB.durationFast} ${MB.ease}`,
-                }}>
-                  <div>
-                    <div>{c.name}</div>
-                    <div style={{ fontSize: 12, marginTop: 2, opacity: 0.7, fontWeight: 400 }}>{c.sub}</div>
-                  </div>
+                <button
+                  key={c.id}
+                  type="button"
+                  className={`mb-row mb-row--between${on ? ' mb-row--on' : ''}`}
+                  aria-pressed={on}
+                  onClick={() => setCover(c.id)}
+                >
+                  <span>
+                    <span className="mb-body" style={{ fontWeight: 550, color: 'inherit', display: 'block' }}>{c.name}</span>
+                    <span className="mb-meta" style={{ color: 'inherit', opacity: 0.75 }}>{c.sub}</span>
+                  </span>
                   {on && <Icon.check />}
                 </button>
               );
             })}
           </div>
         )}
+
         {saveErr && (
-          <div style={{ marginTop: 12, padding: 12, background: MB.badSoft, borderRadius: 10, color: MB.bad, fontFamily: MB.sans, fontSize: 12.5 }}>
-            Couldn't save profile: {saveErr}
-          </div>
+          <p className="mb-note mb-note--bad" style={{ marginTop: 12 }}>
+            Couldn't save your profile: {saveErr}
+          </p>
         )}
       </div>
 
-      <Disclaimer style={{ margin: '0 20px 12px' }} />
-      <div style={{ padding: '16px 20px calc(env(safe-area-inset-bottom, 0px) + 20px)', display: 'flex', gap: 10, borderTop: `1px solid ${MB.border}`, background: MB.surface }}>
+      <Disclaimer style={{ margin: '12px 20px' }} />
+      <div style={{
+        padding: '14px 20px calc(env(safe-area-inset-bottom, 0px) + 18px)',
+        display: 'flex', gap: 10,
+        borderTop: `1px solid ${MB.border}`, background: MB.surface,
+      }}>
         {step > 0 && <Button kind="secondary" onClick={back}>Back</Button>}
         {step < total - 1 ? (
           <Button kind="accent" full onClick={next} disabled={(step === 1 && !insurer) || (step === 2 && !tier)}>
@@ -216,7 +239,7 @@ function Onboarding({ onDone }) {
           </Button>
         ) : (
           <Button kind="accent" full onClick={finish} disabled={saving || !tier}>
-            {saving ? (saved ? 'Ready!' : 'Saving...') : 'Start using MediBridge'}
+            {saving ? (saved ? 'Saved' : 'Saving') : 'Save profile'}
           </Button>
         )}
       </div>

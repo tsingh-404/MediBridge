@@ -47,7 +47,7 @@ if (apiBase.startsWith('http://')) {
 }
 
 // Everything the app needs at runtime — sources and build tooling stay behind.
-const ASSETS = ['index.html', 'js', 'vendor', 'fonts'];
+const ASSETS = ['index.html', 'styles.css', 'js', 'vendor', 'fonts'];
 
 for (const a of ASSETS) {
   try {
