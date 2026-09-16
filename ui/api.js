@@ -23,8 +23,13 @@
     return _deviceId;
   }
 
+  function isNativeApp() {
+    return !!(window.MBNative && window.MBNative.isNative && window.MBNative.isNative());
+  }
+
   function headers(json) {
-    const h = { 'X-MB-Device': deviceId() };
+    const h = {};
+    if (isNativeApp()) h['X-MB-Device'] = deviceId();
     if (json) h['Content-Type'] = 'application/json';
     return h;
   }

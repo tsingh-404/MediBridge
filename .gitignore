@@ -8,7 +8,9 @@ data/user_profile.json
 build/
 dist/
 .claude/
+.codewhale/
 graphify-out/
+data/backups/
 
 # Mobile (Capacitor)
 node_modules/

@@ -24,7 +24,7 @@ medibridge-cli
 # Ingest data (one-time after clone — requires knowledge/ directory)
 python -m medibridge.data.ingest
 python -m medibridge.data.ingest --skip-chroma   # skip vector embeddings
-python -m medibridge.data.ingest --no-reset      # preserve existing SQLite, append only
+python -m medibridge.data.ingest --no-reset      # keep DB file; writers may replace/upsert rows
 
 # Tests
 python -m pytest tests/ -v
@@ -36,7 +36,9 @@ python -m build
 
 **Required env:** `OPENAI_API_KEY` in `.env` (see `.env.example`). Optional: `LANGSMITH_*` vars for tracing.
 
-**`knowledge/` directory is not in repo** — must be provided externally before ingestion. Contains: MBS XML, IMAP TSV, Deed PDF, MBS Book PDF, Item Info PDF, per-insurer markdown.
+For test/build tooling use `pip install -e ".[dev]"`.
+
+**`knowledge/` is tracked in this private repo** and contains the source files for ingestion: MBS XML, IMAP TSV, Deed PDF, MBS Book PDF, Item Info PDF, per-insurer markdown, and reference notes.
 
 ## Frontend build (`ui/` is no longer no-build)
 
@@ -67,7 +69,9 @@ load-bearing. Adding a file means adding it to `ENTRIES` in
 cd mobile
 MB_API_BASE=https://your-api npm run sync   # build:web -> www/ -> cap sync
 npm run android                             # open Android Studio
-npm run android:apk                         # debug APK (needs JDK 17)
+npm run android:apk                         # Windows debug APK (gradlew.bat, needs JDK 17)
+npm run ios                                 # open Xcode
+npm run ios:sim                             # unsigned simulator compile check (macOS/Xcode)
 npm run guard                               # fail on dev-only settings in a release
 npm run make:art                            # regenerate icon/splash from mobile/assets-src
 npm run fetch:fonts                         # re-vendor webfonts into ui/fonts/
@@ -120,7 +124,7 @@ CLI (cli.py + onboarding.py)
 | `schema.py` | All `CREATE TABLE` / `CREATE INDEX` / FTS5 DDL |
 | `queries.py` | Read helpers: `get_item_by_number`, `search_items_by_keyword`, `search_clinics`, `ALLOWED_CLINIC_TYPES`, … |
 | `parsers/` | Raw input → in-memory: `mbs_xml`, `imap`, `oshc_deed`, `mbs_book`, `mbs_item_info`, `knowledge_md` |
-| `ingest/` | In-memory → SQLite/Chroma writes: `mbs`, `insurers`, `oshc_rules`, `clinics`, `chroma`. Orchestrator in `__init__.py`; entry point in `__main__.py` |
+| `ingest/` | In-memory → SQLite/Chroma writes: `mbs`, `insurers`, `oshc_rules`, `clinics`, `chroma`. Orchestrator in `pipeline.py`; entry point in `__main__.py` |
 | `vectorstore.py` | Chroma client + add/query helpers |
 
 **Other key modules:**
@@ -133,7 +137,7 @@ CLI (cli.py + onboarding.py)
 | `agent/graph.py` | `build_graph()` — LangGraph state machine entry point |
 | `agent/prompts.py` | `SYSTEM_TEMPLATE` + `system_prompt()` — injected per-turn with live user profile |
 
-**Adding a new data source:** drop the raw file under `data/sources/`, add a parser under `data/parsers/`, add a writer under `data/ingest/<source>.py`, wire it into `data/ingest/__init__.py:ingest_sqlite()`, and extend `data/schema.py` with the table.
+**Adding a new data source:** government/policy sources usually live under `knowledge/`; structured seed files live under `data/sources/`. Add a parser under `data/parsers/`, add a writer under `data/ingest/<source>.py`, wire it into `data/ingest/pipeline.py:ingest_sqlite()`, and extend `data/schema.py` with the table.
 
 ## Coverage Calculator Logic
 
@@ -153,12 +157,23 @@ Reciprocal rank fusion: 60% vector (ChromaDB `mbs_descriptions`) + 40% FTS5 (SQL
 
 Queensland clinic directory (~1,450 rows after repair). Source CSV at `data/sources/clinics_qld.csv` is ingested into the `clinics` table in `medibridge.db`. Ingest repairs the scrape: postcodes recovered from the address tail, duplicate per-service-type listings merged into comma-joined `type` values. Filters: `postcode` and/or `suburb` (case-insensitive), optional `clinic_type` ∈ {GP, Psychology, Pharmacy, Psychiatry, Hospital}. The `type` column is comma-separated multi-value — the query wraps it with commas to avoid `Psych*` substring collisions. `phone`, `hours`, `latitude`, `longitude` are NULL across the dataset; the tool drops them from output.
 
-## Data Not in Repo
+## Tracked and Ignored Data
 
-- `data/` — committed pre-built DB, ChromaDB, and source seeds (only `user_profile.json` is gitignored)
+- `data/` — committed pre-built DB, ChromaDB, and source seeds (only `user_profile.json` and backup dumps are gitignored)
 - `data/sources/clinics_qld.csv` — raw QLD clinics CSV (read-only seed input, repaired at ingest)
-- `knowledge/` — source documents for ingestion (must be provided)
+- `knowledge/` — tracked source documents for ingestion in this private repo
 - `.env` — secrets
+
+## CI
+
+`.github/workflows/mobile.yml` runs on PRs and `main` pushes:
+
+- `web-assets`: `npm ci`, `npm run build:web`, then verifies committed `ui/js`, `ui/vendor`, and `ui/fonts` do not drift.
+- `backend`: installs `.[dev]` and runs `python -m pytest tests/ -v`.
+- `android`: Node 22, JDK 17, Android SDK, `npm run guard`, `npm run sync`, then `./gradlew assembleDebug`.
+- `ios`: Node 22, `npm run guard`, `npm run sync`, then an unsigned simulator `xcodebuild`.
+
+`mobile/capacitor.config.json` must stay production-clean in git. Do not commit `server.url`, `server.cleartext`, or `android.allowMixedContent`; use uncommitted local config changes only for LAN/http debugging.
 
 ## graphify
 

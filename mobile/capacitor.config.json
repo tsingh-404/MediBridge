@@ -1,9 +1,5 @@
 {
   "appId": "com.medibridge.app",
   "appName": "MediBridge",
-  "webDir": "www",
-  "android": {
-    "_comment": "allowMixedContent is DEV ONLY. androidScheme defaults to https, so the page origin is https://localhost and Chromium blocks any http:// API call as mixed content - before Android's cleartext policy is ever consulted, which is why network_security_config.xml does not help. Remove this (or let the guard fail the build) once MB_API_BASE is an https:// origin.",
-    "allowMixedContent": true
-  }
+  "webDir": "www"
 }

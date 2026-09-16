@@ -5,10 +5,12 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+from fastapi.testclient import TestClient
 
 from medibridge.data import db as dbmod
 from medibridge.data.ingest.insurers import seed_all
 from medibridge import profile as profmod
+from medibridge.server.main import app
 from medibridge.tools.coverage_calculator import _get_user_tier
 
 
@@ -90,3 +92,40 @@ def test_device_from_config():
     assert profmod.device_from_config({"configurable": {"device_id": None}}) is None
     assert profmod.device_from_config({}) is None
     assert profmod.device_from_config(None) is None
+
+
+def test_profile_http_routes_scope_by_device_header(db):
+    tiers = _tiers(db)
+    client = TestClient(app)
+
+    legacy = {"tier_id": tiers[0], "cover_type": "single", "policy_start_date": "2025-01-01"}
+    device_a = {"tier_id": tiers[1], "cover_type": "couple", "policy_start_date": "2025-02-02"}
+    device_b = {"tier_id": tiers[2], "cover_type": "family", "policy_start_date": "2025-03-03"}
+
+    assert client.put("/api/profile", json=legacy).status_code == 200
+    assert client.put("/api/profile", json=device_a, headers={"X-MB-Device": "dev-a"}).status_code == 200
+    assert client.put("/api/profile", json=device_b, headers={"X-MB-Device": "dev-b"}).status_code == 200
+
+    assert client.get("/api/profile").json()["tier"]["id"] == tiers[0]
+    assert client.get("/api/profile", headers={"X-MB-Device": "dev-a"}).json()["tier"]["id"] == tiers[1]
+    assert client.get("/api/profile", headers={"X-MB-Device": "dev-b"}).json()["tier"]["id"] == tiers[2]
+
+
+def test_profile_http_delete_is_scoped_to_device_header(db):
+    tiers = _tiers(db)
+    client = TestClient(app)
+
+    assert client.put(
+        "/api/profile",
+        json={"tier_id": tiers[0], "cover_type": "single", "policy_start_date": "2025-01-01"},
+    ).status_code == 200
+    assert client.put(
+        "/api/profile",
+        json={"tier_id": tiers[1], "cover_type": "single", "policy_start_date": "2025-01-01"},
+        headers={"X-MB-Device": "dev-a"},
+    ).status_code == 200
+
+    assert client.delete("/api/profile", headers={"X-MB-Device": "dev-a"}).status_code == 204
+
+    assert client.get("/api/profile", headers={"X-MB-Device": "dev-a"}).status_code == 404
+    assert client.get("/api/profile").json()["tier"]["id"] == tiers[0]

@@ -12,7 +12,9 @@
     "guard": "node scripts/release-guard.mjs",
     "sync": "npm run build:web && npm run prepare:www && cap sync",
     "android": "npm run sync && cap open android",
-    "android:apk": "npm run sync && cd android && gradlew.bat assembleDebug"
+    "android:apk": "npm run sync && cd android && gradlew.bat assembleDebug",
+    "ios": "npm run sync && cap open ios",
+    "ios:sim": "npm run sync && cd ios/App && xcodebuild -scheme App -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' -configuration Debug CODE_SIGNING_ALLOWED=NO build"
   },
   "devDependencies": {
     "@capacitor/assets": "^3.0.5",

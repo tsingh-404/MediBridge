@@ -23,10 +23,13 @@ const Icon = {
 // native.js is last-in-first-served, so a nested view registered after the root
 // handler gets the press first.
 function useBackHandler(active, fn) {
+  const fnRef = useRef(fn);
+  useEffect(() => { fnRef.current = fn; }, [fn]);
+
   useEffect(() => {
     if (!active || !window.MBNative) return;
-    return window.MBNative.pushBackHandler(fn);
-  }, [active, fn]);
+    return window.MBNative.pushBackHandler(() => fnRef.current && fnRef.current());
+  }, [active]);
 }
 
 function useKeyboardOpen() {

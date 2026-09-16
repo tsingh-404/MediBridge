@@ -29,8 +29,8 @@ jobs:
         working-directory: mobile
       - name: Committed build output must match the sources
         run: |
-          git diff --exit-code -- ui/js ui/vendor \
-            || { echo "::error::ui/js is stale — run 'npm run build:web' in mobile/ and commit"; exit 1; }
+          git diff --exit-code -- ui/js ui/vendor ui/fonts \
+            || { echo "::error::Committed web assets are stale — run 'npm run build:web' in mobile/ and commit"; exit 1; }
 
   backend:
     runs-on: ubuntu-latest
@@ -39,7 +39,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - run: pip install -e .
+      - run: pip install -e ".[dev]"
       - run: python -m pytest tests/ -v
 
   android:
@@ -56,6 +56,9 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - name: Install Android SDK packages
+        run: sdkmanager "platforms;android-36" "build-tools;36.0.0"
       - run: npm ci
         working-directory: mobile
       - name: No dev-only settings in the build
@@ -94,7 +97,7 @@ jobs:
           xcodebuild \
             -scheme App \
             -sdk iphonesimulator \
-            -destination 'platform=iOS Simulator,name=iPhone 16' \
+            -destination 'generic/platform=iOS Simulator' \
             -configuration Debug \
             CODE_SIGNING_ALLOWED=NO \
             build
