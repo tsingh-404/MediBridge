@@ -123,3 +123,56 @@ def search_clinics(
     params.append(limit)
     rows = conn.execute(sql, params).fetchall()
     return [dict(r) for r in rows]
+
+
+def get_clinic_analytics(conn: sqlite3.Connection) -> dict:
+    """Return summary statistics for the clinic analytics dashboard."""
+
+    total_clinics = conn.execute(
+        "SELECT COUNT(*) FROM clinics"
+    ).fetchone()[0]
+
+    billing_rows = conn.execute(
+        """
+        SELECT LOWER(COALESCE(NULLIF(TRIM(billing), ''), 'unknown')) AS billing,
+               COUNT(*) AS count
+        FROM clinics
+        GROUP BY LOWER(COALESCE(NULLIF(TRIM(billing), ''), 'unknown'))
+        ORDER BY count DESC
+        """
+    ).fetchall()
+
+    by_billing = {
+        billing: 0
+        for billing in sorted(ALLOWED_BILLING)
+    }
+
+    for row in billing_rows:
+        by_billing[row[0]] = row[1]
+
+    type_counts = {
+        clinic_type: 0
+        for clinic_type in sorted(ALLOWED_CLINIC_TYPES)
+    }
+
+    type_rows = conn.execute(
+        """
+        SELECT type
+        FROM clinics
+        WHERE type IS NOT NULL
+          AND TRIM(type) != ''
+        """
+    ).fetchall()
+
+    for row in type_rows:
+        for clinic_type in row[0].split(","):
+            clinic_type = clinic_type.strip()
+
+            if clinic_type in type_counts:
+                type_counts[clinic_type] += 1
+
+    return {
+        "total_clinics": total_clinics,
+        "by_type": type_counts,
+        "by_billing": by_billing,
+    }
