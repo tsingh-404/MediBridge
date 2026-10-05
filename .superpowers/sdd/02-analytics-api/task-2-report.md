@@ -83,3 +83,51 @@ The suppression function only has the rows passed to a single invocation. Its co
 Task 3 needs an API-level release rule before endpoints expose repeated filtered results. Concrete design question: should the API restrict overlapping filter comparisons, or maintain a release policy that suppresses/rejects a result when it could be differenced against previously released aggregates? A response-history cache alone cannot retract a value already returned, so the API decision must account for earlier broad responses as well as later narrow ones.
 
 The global synthetic-only caveat remains explicit. Threshold 10 is a demo convention, not a claim of real-data safety or a complete real-world disclosure-control system. No student routes/UI or `data/medibridge.db` were changed.
+
+## Review fix round 1 — 5 October 2026
+
+**Fix commit:** `6f9ad6f` (`Fix disclosure support and label allowlists`).
+
+### RED — topic-rate cell support
+
+Added an assertion that a topic-rate cell passes through `suppress_table` with its support count. Before the fix, it failed because the metric constructed the cell without `distinct_sessions`:
+
+```text
+.venv\Scripts\python.exe -m pytest tests/test_analytics_demo_metrics.py::test_topic_rate_uses_all_sessions_including_unknown_and_no_topic -q
+1 failed in 0.18s
+ValueError: each cell must have a non-negative distinct_sessions count
+```
+
+The topic-rate query now records the numerator (distinct topic sessions) as the cell's distinct-session support. The existing metric-cell change continues to record selected sessions separately from the turn numerator for `question_turns`.
+
+### RED — insurer/tier label allowlists
+
+Added cases for invalid `insurer_id` and `tier_id` dimensions:
+
+```text
+.venv\Scripts\python.exe -m pytest tests/test_analytics_demo_disclosure.py::test_suppression_rejects_unknown_insurer_and_tier_values -q
+FF                                                                       [100%]
+2 failed in 0.15s
+Failed: DID NOT RAISE <class 'ValueError'>
+```
+
+The synthetic insurer and tier label tuples now live beside the Phase 1 scenario generator's other code allowlists and continue to drive deterministic scenario selection. Disclosure validation imports those same tuples and rejects all other values.
+
+### GREEN — focused metrics and disclosure suites
+
+```text
+.venv\Scripts\python.exe -m pytest tests/test_analytics_demo_metrics.py tests/test_analytics_demo_disclosure.py -q
+..........................                                               [100%]
+26 passed in 0.47s
+```
+
+### GREEN — full repository suite
+
+```text
+.venv\Scripts\python.exe -m pytest -q
+........................................................................ [ 76%]
+.....................s                                                   [100%]
+93 passed, 1 skipped in 5.99s
+```
+
+The cross-request differencing issue remains with the Task 3 API-level release-policy question above; this fix only makes individual tabular cells disclose their support accurately to Task 2 suppression.
