@@ -10,7 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from medibridge.agent.graph import build_graph
-from medibridge.server.routes import chat, clinics, coverage, insurers, mbs, profile
+from medibridge.server.routes import analytics, chat, clinics, coverage, insurers, mbs, profile
 from medibridge.config import DB_PATH, ROOT_DIR, settings
 
 WEB_DIR = ROOT_DIR / "ui"
@@ -58,6 +58,7 @@ def health() -> dict:
     return {"ok": True, "db": DB_PATH.exists()}
 
 api_routers = [
+    analytics.router,
     insurers.router,
     profile.router,
     coverage.router,
