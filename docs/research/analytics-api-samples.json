@@ -1116,6 +1116,19 @@
                 "dimensions": {
                   "location_basis": "service_search_area",
                   "region": "Brisbane",
+                  "topic_code": "coverage_waiting_period"
+                },
+                "distinct_sessions": null,
+                "numerator": null,
+                "reason_code": "complementary_suppression",
+                "suppressed": true,
+                "value": null
+              },
+              {
+                "denominator": null,
+                "dimensions": {
+                  "location_basis": "service_search_area",
+                  "region": "Brisbane",
                   "topic_code": "dental_optical_benefits"
                 },
                 "distinct_sessions": null,
@@ -1134,6 +1147,19 @@
                 "distinct_sessions": null,
                 "numerator": null,
                 "reason_code": "primary_suppression",
+                "suppressed": true,
+                "value": null
+              },
+              {
+                "denominator": null,
+                "dimensions": {
+                  "location_basis": "service_search_area",
+                  "region": "Brisbane",
+                  "topic_code": "gastrointestinal_information"
+                },
+                "distinct_sessions": null,
+                "numerator": null,
+                "reason_code": "complementary_suppression",
                 "suppressed": true,
                 "value": null
               },
@@ -1220,6 +1246,19 @@
                 "dimensions": {
                   "location_basis": "service_search_area",
                   "region": "Brisbane",
+                  "topic_code": "sexual_reproductive_health_information"
+                },
+                "distinct_sessions": null,
+                "numerator": null,
+                "reason_code": "complementary_suppression",
+                "suppressed": true,
+                "value": null
+              },
+              {
+                "denominator": null,
+                "dimensions": {
+                  "location_basis": "service_search_area",
+                  "region": "Brisbane",
                   "topic_code": "specialist_care"
                 },
                 "distinct_sessions": null,
@@ -1264,6 +1303,19 @@
                 "distinct_sessions": null,
                 "numerator": null,
                 "reason_code": "primary_suppression",
+                "suppressed": true,
+                "value": null
+              },
+              {
+                "denominator": null,
+                "dimensions": {
+                  "location_basis": "stated_demo_region",
+                  "region": "Brisbane",
+                  "topic_code": "cost_out_of_pocket"
+                },
+                "distinct_sessions": null,
+                "numerator": null,
+                "reason_code": "complementary_suppression",
                 "suppressed": true,
                 "value": null
               },
@@ -4664,6 +4716,7 @@
                 "value": null
               }
             ],
+            "data_state": "suppressed",
             "denominator": null,
             "filters_applied": {
               "end_date": "2025-03-31",
@@ -4672,6 +4725,7 @@
               "start_date": "2025-01-01"
             },
             "metric": "concern_code_rate_per_1000",
+            "no_data": false,
             "numerator": null,
             "suppressed": true,
             "unit": "sessions_per_1000_selected_sessions",
@@ -6061,6 +6115,7 @@
                 "value": null
               }
             ],
+            "data_state": "suppressed",
             "denominator": null,
             "filters_applied": {
               "end_date": "2025-03-31",
@@ -6069,6 +6124,7 @@
               "start_date": "2025-01-01"
             },
             "metric": "topic_code_rate_per_1000",
+            "no_data": false,
             "numerator": null,
             "suppressed": true,
             "unit": "sessions_per_1000_selected_sessions",

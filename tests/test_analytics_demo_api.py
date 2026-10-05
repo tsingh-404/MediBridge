@@ -241,6 +241,42 @@ def test_regions_keep_unknown_geography_and_location_basis_distinct(analytics_cl
     assert any(cell["dimensions"].get("location_basis") == "stated_demo_region" for cell in cells)
 
 
+def test_region_rate_emits_zero_for_selected_category_with_no_matching_events(analytics_client):
+    response = analytics_client.get(
+        "/api/demo/regions",
+        params={"region": "Brisbane", "topic_code": "respiratory_information"},
+    )
+
+    assert response.status_code == 200
+    table = response.json()["tables"]["topic_rates"]
+    cell = next(
+        cell for cell in table["cells"]
+        if cell["dimensions"].get("topic_code") == "respiratory_information"
+    )
+    assert cell["numerator"] == 0
+    assert cell["denominator"] == 6
+    assert cell["value"] == 0
+    assert cell["suppressed"] is False
+    assert table["no_data"] is False
+
+
+def test_empty_trend_selection_returns_explicit_no_data_shape(analytics_client):
+    response = analytics_client.get(
+        "/api/demo/trend",
+        params={"region": "Far North Queensland"},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["no_data"] is True
+    assert payload["data_state"] == "no_data"
+    assert payload["numerator"] == 0
+    assert payload["denominator"] == 0
+    assert payload["value"] == 0
+    assert payload["cells"] == []
+    assert "no matching sessions" in payload["caveat"].lower()
+
+
 def test_trend_labels_injected_pattern_as_artificial(analytics_client):
     response = analytics_client.get("/api/demo/trend")
 

@@ -2,6 +2,7 @@
 
 from dataclasses import asdict, replace
 from datetime import date
+from itertools import product
 from pathlib import Path
 import sqlite3
 from typing import Any, Iterator, Mapping
@@ -283,14 +284,31 @@ def _rate_cells(
             JOIN issue_events e ON e.message_id = m.message_id{event_where}{event_group}""",
         values + event_values,
     ).fetchall()
-    cells = []
+    period_dims = (group_by[0],) if period_expr else ()
+    denominator_dims = period_dims + session_dims
+    category_values = []
+    for name in event_dims:
+        allowed = TOPIC_CODES if name == "topic_code" else CONCERN_CODES
+        selected = getattr(filters, name)
+        category_values.append((selected,) if selected is not None else tuple(sorted(allowed)))
+
+    event_counts = {}
     for row in event_rows:
         dimensions = dict(zip(group_by, (str(value) for value in row[:-1])))
-        key = tuple(dimensions[name] if name in dimensions else None for name in group_by if name in session_dims or name in {"month", "week"})
-        denominator = denom_map.get(key, 0)
-        numerator = row[-1]
-        rate = 1000.0 * numerator / denominator if denominator else 0.0
-        cells.append(AggregateCell(dimensions, numerator, denominator, rate, numerator))
+        denominator_key = tuple(dimensions[name] for name in denominator_dims)
+        category_key = tuple(dimensions[name] for name in event_dims)
+        event_counts[(denominator_key, category_key)] = row[-1]
+
+    cells = []
+    category_combinations = product(*category_values) if category_values else [()]
+    combinations = tuple(category_combinations)
+    for denominator_key, denominator in denom_map.items():
+        denominator_dimensions = dict(zip(denominator_dims, denominator_key))
+        for category_key in combinations:
+            dimensions = denominator_dimensions | dict(zip(event_dims, category_key))
+            numerator = event_counts.get((denominator_key, category_key), 0)
+            rate = 1000.0 * numerator / denominator if denominator else 0.0
+            cells.append(AggregateCell(dimensions, numerator, denominator, rate, numerator))
     return cells
 
 
@@ -420,7 +438,7 @@ def _period_rows(
 def _trend_tables(conn: sqlite3.Connection, filters: AnalyticsFilter, bucket: str) -> dict[str, dict[str, Any]]:
     tables: dict[str, dict[str, Any]] = {}
     for category in ("topic_code", "concern_code"):
-        current, _ = _period_rows(conn, filters, bucket, category)
+        current, current_denominators = _period_rows(conn, filters, bucket, category)
         baseline, _ = _period_rows(conn, filters, bucket, category, date_free=True) if bucket == "month" else ({}, {})
         table_cells: list[AggregateCell] = []
         cell_extras: list[dict[str, Any]] = []
@@ -484,15 +502,25 @@ def _trend_tables(conn: sqlite3.Connection, filters: AnalyticsFilter, bucket: st
             output["series"] = "current"
             output.update(extra)
             visible_cells.append(output)
+        no_data = not current_denominators
+        table_caveat = "Monthly and weekly counts are synthetic. Any injected spike is an artificial demonstration pattern, not an outbreak or forecast."
+        if no_data:
+            table_caveat = f"{table_caveat} No matching sessions for the selected filters; zero is a valid result."
         tables[f"{category}_trend"] = {
             "metric": f"{category}_rate_per_1000",
             "unit": "sessions_per_1000_selected_sessions",
-            "numerator": None,
-            "denominator": None,
-            "value": None,
+            "numerator": 0 if no_data else None,
+            "denominator": 0 if no_data else None,
+            "value": 0 if no_data else None,
             "suppressed": any(cell["suppressed"] for cell in visible_cells),
+            "no_data": no_data,
+            "data_state": "no_data" if no_data else (
+                "suppressed"
+                if visible_cells and all(cell["suppressed"] for cell in visible_cells)
+                else "available"
+            ),
             "cells": visible_cells,
-            "caveat": "Monthly and weekly counts are synthetic. Any injected spike is an artificial demonstration pattern, not an outbreak or forecast.",
+            "caveat": table_caveat,
         }
     return tables
 
