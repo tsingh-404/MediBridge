@@ -77,3 +77,31 @@ def test_lookup_tables_built(conn) -> None:
     _seed(conn)
     cat = conn.execute("SELECT * FROM categories").fetchall()
     assert any(r["category_desc"] == "PATHOLOGY SERVICES" for r in cat)
+
+
+def test_get_clinic_analytics(conn) -> None:
+    conn.executemany(
+        """
+        INSERT INTO clinics (
+            id, name, suburb, state, postcode, billing, type
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+        """,
+        [
+            (1, "Clinic A", "Brisbane", "QLD", "4000", "bulk", "GP"),
+            (2, "Clinic B", "Brisbane", "QLD", "4000", "mixed", "GP, Psychology"),
+            (3, "Clinic C", "South Brisbane", "QLD", "4101", None, "Psychiatry"),
+        ],
+    )
+    conn.commit()
+
+    result = queries.get_clinic_analytics(conn)
+
+    assert result["total_clinics"] == 3
+    assert result["by_type"]["GP"] == 2
+    assert result["by_type"]["Psychology"] == 1
+    assert result["by_type"]["Psychiatry"] == 1
+    assert result["by_billing"]["bulk"] == 1
+    assert result["by_billing"]["mixed"] == 1
+    assert result["by_billing"]["unknown"] == 1
+    assert result["by_billing"]["private"] == 0
