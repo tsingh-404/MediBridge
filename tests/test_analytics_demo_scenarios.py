@@ -110,12 +110,21 @@ def test_mix_includes_required_stable_unclassified_and_mixed_topics():
 
 def test_deterministic_mixed_topic_turn_tags_two_topics_on_one_user_message():
     scenario = scenario_for(88, 42, "2026-04-03T00:00:00Z")
-    topic_tags = {tag.topic_code: tag.message_index for tag in scenario.issue_tags}
+    tags_by_topic = {tag.topic_code: tag for tag in scenario.issue_tags}
 
-    assert len(topic_tags) >= 2
-    assert len(set(topic_tags.values())) == 1
-    index = next(iter(topic_tags.values()))
+    assert set(tags_by_topic) == {"primary_care", "pharmacy_medicines"}
+    assert {tag.message_index for tag in tags_by_topic.values()} == {0}
+    assert tags_by_topic["primary_care"].answer_outcome == "resolved"
+    assert tags_by_topic["pharmacy_medicines"].answer_outcome == "unresolved"
+    index = tags_by_topic["primary_care"].message_index
     assert scenario.messages[index].role == "user"
+
+    assistant_reply = scenario.messages[index + 1].content
+    assert "GP" in assistant_reply
+    assert "medicine costs" in assistant_reply
+    assert "pharmacist or insurer" in assistant_reply
+    assert "cannot confirm your out-of-pocket amount" in assistant_reply
+    assert "still need the pharmacist or insurer to check" in scenario.messages[index + 2].content
 
 
 def test_scenario_for_is_repeatable_for_same_inputs():

@@ -232,10 +232,20 @@ def scenario_for(seed: int, sequence_no: int, started_at_utc: str) -> Scenario:
             "user",
             first[4] + location_context + (f" Also, {second[4]}" if same_turn_mixed else ""),
         ),
-        DialogueMessage("assistant", first[5]),
+        DialogueMessage(
+            "assistant",
+            "A GP is a common first contact for a non-urgent concern. For medicine costs, "
+            "ask the pharmacist or insurer to check your prescription and plan details; "
+            "I cannot confirm your out-of-pocket amount here."
+            if same_turn_mixed
+            else first[5],
+        ),
         DialogueMessage(
             "user",
-            second[4] if second and not same_turn_mixed else "Thanks, that gives me a starting point.",
+            "I still need the pharmacist or insurer to check the medicine cost for my plan."
+            if same_turn_mixed
+            else second[4] if second
+            else "Thanks, that gives me a starting point.",
         ),
         DialogueMessage(
             "assistant",
