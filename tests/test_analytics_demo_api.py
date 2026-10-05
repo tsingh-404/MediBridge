@@ -173,11 +173,31 @@ def test_empty_selection_has_stable_zero_shape(analytics_client):
 
     assert response.status_code == 200
     payload = response.json()
-    assert payload["numerator"] is None
-    assert payload["suppressed"] is True
+    assert payload["numerator"] == 0
+    assert payload["denominator"] == 0
+    assert payload["value"] == 0
+    assert payload["suppressed"] is False
+    assert payload["no_data"] is True
+    assert payload["data_state"] == "no_data"
+    assert "no matching sessions" in payload["caveat"].lower()
     assert payload["cells"]
-    assert payload["cells"][0]["reason_code"] == "primary_suppression"
+    assert payload["cells"][0]["numerator"] == 0
+    assert payload["cells"][0]["denominator"] == 0
+    assert payload["cells"][0]["reason_code"] is None
     assert payload["synthetic"] is True
+
+
+def test_zero_numerator_with_positive_denominator_is_not_no_data():
+    from medibridge.analytics_demo.api import _table
+    from medibridge.analytics_demo.metrics import AggregateCell
+
+    table = _table("share", "share", [AggregateCell({}, 0, 100, 0.0, 0)], "Synthetic metric.")
+
+    assert table["numerator"] == 0
+    assert table["denominator"] == 100
+    assert table["value"] == 0
+    assert table["no_data"] is False
+    assert table["data_state"] == "available"
 
 
 def test_all_suppressed_topic_table_has_nulls_and_explicit_flags(analytics_client):
@@ -189,6 +209,8 @@ def test_all_suppressed_topic_table_has_nulls_and_explicit_flags(analytics_clien
     assert all(cell["suppressed"] for cell in payload["cells"])
     assert all(cell["value"] is None for cell in payload["cells"])
     assert all(cell["reason_code"] for cell in payload["cells"])
+    assert payload["no_data"] is False
+    assert payload["data_state"] == "suppressed"
 
 
 def test_regions_keep_unknown_geography_and_location_basis_distinct(analytics_client):
@@ -206,6 +228,48 @@ def test_trend_labels_injected_pattern_as_artificial(analytics_client):
 
     assert response.status_code == 200
     assert "artificial demonstration pattern" in response.json()["caveat"].lower()
+
+
+def test_trend_hides_derived_baseline_when_current_cell_is_suppressed(analytics_client, monkeypatch):
+    from types import SimpleNamespace
+
+    from medibridge.analytics_demo import api
+    from medibridge.analytics_demo.disclosure import SuppressedCell
+
+    def period_rows(conn, filters, bucket, category, date_free=False):
+        if category != "topic_code":
+            return {}, {}
+        if date_free:
+            return {("2024-01", "Brisbane", "stated_demo_region", "primary_care"): (12, 100)}, {}
+        return {("2025-01", "Brisbane", "stated_demo_region", "primary_care"): (2, 20)}, {}
+
+    def selectively_suppress(rows):
+        if not rows:
+            return SimpleNamespace(cells=())
+        current, baseline = rows
+        return SimpleNamespace(
+            cells=(
+                SuppressedCell(current.dimensions, None, None, None, None, True, "primary_suppression"),
+                SuppressedCell(baseline.dimensions, baseline.numerator, baseline.denominator,
+                               baseline.value, baseline.distinct_sessions, False, None),
+            )
+        )
+
+    monkeypatch.setattr(api, "_period_rows", period_rows)
+    monkeypatch.setattr(api, "suppress_table", selectively_suppress)
+    conn = api._database_connection(analytics_client.app.state.db_path)
+    try:
+        tables = api._trend_tables(conn, api.AnalyticsFilter(), "month")
+    finally:
+        conn.close()
+
+    cell = tables["topic_code_trend"]["cells"][0]
+    assert cell["suppressed"] is True
+    assert cell["baseline_available"] is False
+    assert cell["baseline_numerator"] is None
+    assert cell["baseline_denominator"] is None
+    assert cell["baseline_rate_per_1000"] is None
+    assert cell["rate_difference_per_1000"] is None
 
 
 def test_event_filters_are_applied_to_topic_and_quality_tables(analytics_client):

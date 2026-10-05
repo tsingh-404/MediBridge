@@ -83,7 +83,7 @@ def _visible(cell: AggregateCell) -> SuppressedCell:
     return SuppressedCell(
         dimensions=dict(cell.dimensions),
         numerator=cell.numerator,
-        denominator=cell.denominator,
+        denominator=0 if cell.distinct_sessions == 0 and cell.denominator is None else cell.denominator,
         value=cell.value,
         distinct_sessions=cell.distinct_sessions,
         suppressed=False,
@@ -127,7 +127,9 @@ def suppress_table(rows: list[AggregateCell], min_sessions: int = 10) -> Suppres
             raise ValueError("each cell must have a non-negative distinct_sessions count")
 
     primary_indexes = {
-        index for index, cell in enumerate(rows) if cell.distinct_sessions < min_sessions
+        index
+        for index, cell in enumerate(rows)
+        if 0 < cell.distinct_sessions < min_sessions
     }
     has_primary_suppression = bool(primary_indexes)
     cells = []

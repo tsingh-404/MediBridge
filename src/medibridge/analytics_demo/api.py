@@ -130,11 +130,15 @@ def _cell_json(cell: SuppressedCell) -> dict[str, Any]:
 def _table(name: str, unit: str, cells: list[AggregateCell] | tuple[AggregateCell, ...], caveat: str) -> dict[str, Any]:
     safe = suppress_table(list(cells))
     serialized = [_cell_json(cell) for cell in safe.cells]
-    if len(serialized) == 1:
+    no_data = not serialized or all(
+        cell["distinct_sessions"] == 0 and cell["denominator"] == 0 for cell in serialized
+    )
+    if no_data:
+        numerator, denominator, value = 0, 0, 0
+        caveat = f"{caveat} No matching sessions for the selected filters; zero is a valid result."
+    elif len(serialized) == 1:
         first = serialized[0]
         numerator, denominator, value = first["numerator"], first["denominator"], first["value"]
-    elif not serialized:
-        numerator, denominator, value = 0, None, 0
     else:
         numerator, denominator, value = None, None, None
     return {
@@ -144,6 +148,14 @@ def _table(name: str, unit: str, cells: list[AggregateCell] | tuple[AggregateCel
         "denominator": denominator,
         "value": value,
         "suppressed": any(cell["suppressed"] for cell in serialized),
+        "no_data": no_data,
+        "data_state": (
+            "no_data"
+            if no_data
+            else "suppressed"
+            if serialized and all(cell["suppressed"] for cell in serialized)
+            else "available"
+        ),
         "cells": serialized,
         "caveat": caveat,
     }
@@ -167,6 +179,10 @@ def _response(
     for table in tables.values():
         table.setdefault("filters_applied", _filters_applied(filters))
     primary = tables.get(primary_table) if primary_table else None
+    no_data = bool(primary and primary.get("no_data", False))
+    response_caveat = f"{DISCLOSURE_CAVEAT} {caveat}".strip()
+    if no_data:
+        response_caveat = f"{response_caveat} No matching sessions for the selected filters; zero is a valid result."
     return {
         "endpoint": endpoint,
         "synthetic": True,
@@ -176,11 +192,17 @@ def _response(
         "denominator": primary["denominator"] if primary else None,
         "value": primary["value"] if primary else None,
         "suppressed": primary["suppressed"] if primary else False,
+        "no_data": no_data,
+        "data_state": (
+            primary.get("data_state", "suppressed" if primary["suppressed"] else "available")
+            if primary
+            else "metadata"
+        ),
         "cells": primary["cells"] if primary else [],
         "tables": tables,
         "filters_applied": _filters_applied(filters),
         "provenance": dict(provenance),
-        "caveat": f"{DISCLOSURE_CAVEAT} {caveat}".strip(),
+        "caveat": response_caveat,
         **(metadata or {}),
     }
 
@@ -448,7 +470,7 @@ def _trend_tables(conn: sqlite3.Connection, filters: AnalyticsFilter, bucket: st
             if available:
                 prior_safe = safe.cells[safe_index]
                 safe_index += 1
-                if prior_safe.suppressed:
+                if current_safe.suppressed or prior_safe.suppressed:
                     extra.update(
                         baseline_available=False,
                         baseline_numerator=None,

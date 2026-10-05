@@ -32,3 +32,21 @@
 - The API test fixture recursively checks output keys and values for identifiers and raw prompt content, checks all seven endpoints, read-only behavior, date/filter validation, no-data and all-suppressed shapes, unknown geography, location basis, artificial trend labeling, and CLI loopback configuration.
 - Suppression is deliberately table-local per the controller ruling. Separate interactive requests can still be differenced; the response caveat states this prominently and the API makes no real-data safety claim. Task 4 must preserve this warning in the written contract and keep cross-request differencing as a real-data release requirement.
 - The existing unrelated untracked planning/research files were left untouched and excluded from the commit.
+
+## Review fix round — 2026-10-05
+
+Review findings fixed in this round:
+
+- Trend output now nulls `baseline_available`, baseline numerator/denominator/rate, and rate difference whenever the current trend cell is suppressed, as well as when the baseline cell is suppressed. This prevents derived baseline fields from reconstructing a hidden current rate.
+- A true zero-support cell is no longer primary-suppressed. It returns zero numerator/value and denominator 0 when the denominator is otherwise not applicable. Positive support below 10 remains primary-suppressed. Empty selection responses now carry `no_data: true`, `data_state: "no_data"`, denominator 0, and a clear no-matching-sessions caveat; the existing all-suppressed topic-table test continues to require nulls and suppression reasons.
+
+Exact TDD evidence:
+
+- RED: `.venv\Scripts\python.exe -m pytest tests/test_analytics_demo_api.py::test_trend_hides_derived_baseline_when_current_cell_is_suppressed tests/test_analytics_demo_api.py::test_empty_selection_has_stable_zero_shape -q` — **2 failed in 0.47s**. The trend test observed `baseline_available` still true for a suppressed current cell; the empty-selection test observed `numerator` was null instead of zero.
+- GREEN: the same command — **2 passed in 0.27s**.
+- No-data distinction RED: `.venv\Scripts\python.exe -m pytest tests/test_analytics_demo_api.py::test_zero_numerator_with_positive_denominator_is_not_no_data -q` — **1 failed in 0.30s**; a valid zero numerator with denominator 100 had been mislabeled no-data and denominator rewritten to 0.
+- No-data distinction GREEN: `.venv\Scripts\python.exe -m pytest tests/test_analytics_demo_api.py::test_trend_hides_derived_baseline_when_current_cell_is_suppressed tests/test_analytics_demo_api.py::test_empty_selection_has_stable_zero_shape tests/test_analytics_demo_api.py::test_zero_numerator_with_positive_denominator_is_not_no_data -q` — **3 passed in 0.27s**.
+- Suppression-state RED: `.venv\Scripts\python.exe -m pytest tests/test_analytics_demo_api.py::test_all_suppressed_topic_table_has_nulls_and_explicit_flags -q` — **1 failed in 0.37s**; an all-suppressed result was incorrectly labeled `available`.
+- Suppression-state GREEN: the same command — **1 passed in 0.20s**. Empty, available-zero, and all-suppressed states now have distinct metadata.
+- Final focused API, metric, and disclosure tests: `.venv\Scripts\python.exe -m pytest tests/test_analytics_demo_metrics.py tests/test_analytics_demo_api.py tests/test_analytics_demo_disclosure.py -q` — **57 passed in 1.42s**.
+- Final full repository suite: `.venv\Scripts\python.exe -m pytest -q` — **124 passed, 1 skipped in 7.65s**.
