@@ -90,6 +90,7 @@ def test_question_turns_count_distinct_user_messages_not_issue_events(metrics_co
     result = metrics.read_metrics(metrics_conn, "question_turns", (), cohort)
 
     assert result.cells[0].numerator == 4
+    assert result.cells[0].distinct_sessions == 3
 
 
 def test_topic_rate_uses_all_sessions_including_unknown_and_no_topic(metrics_conn):

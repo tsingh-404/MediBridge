@@ -99,6 +99,7 @@ class AggregateCell:
     numerator: int
     denominator: int | None = None
     value: int | float | None = None
+    distinct_sessions: int | None = None
 
 
 @dataclass(frozen=True)
@@ -199,7 +200,12 @@ def _validate_store_filters(conn: sqlite3.Connection, filters: AnalyticsFilter) 
             raise ValueError(f"{name} is not an available value")
 
 
-def _cell(dimensions: Mapping[str, str], numerator: int, denominator: int | None = None) -> AggregateCell:
+def _cell(
+    dimensions: Mapping[str, str],
+    numerator: int,
+    denominator: int | None = None,
+    distinct_sessions: int | None = None,
+) -> AggregateCell:
     value: int | float | None
     if denominator is None:
         value = numerator
@@ -207,7 +213,8 @@ def _cell(dimensions: Mapping[str, str], numerator: int, denominator: int | None
         value = 0.0
     else:
         value = numerator / denominator
-    return AggregateCell(dimensions, numerator, denominator, value)
+    support = numerator if distinct_sessions is None else distinct_sessions
+    return AggregateCell(dimensions, numerator, denominator, value, support)
 
 
 def read_metrics(
@@ -250,12 +257,12 @@ def read_metrics(
     elif metric == "question_turns":
         clauses = ["m.role = 'user'"] + cohort_clauses + event_clauses
         rows = conn.execute(
-            f"""SELECT COUNT(DISTINCT m.message_id)
+            f"""SELECT COUNT(DISTINCT m.message_id), COUNT(DISTINCT s.session_id)
                 FROM sessions s JOIN messages m ON m.session_id = s.session_id
                 JOIN issue_events e ON e.message_id = m.message_id{_where_sql(clauses)}""",
             cohort_values + event_values,
         ).fetchone()
-        cells = (_cell({}, rows[0]),)
+        cells = (_cell({}, rows[0], distinct_sessions=rows[1]),)
     elif metric == "topic_sessions":
         clauses = cohort_clauses + event_clauses
         rows = conn.execute(

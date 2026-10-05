@@ -56,9 +56,9 @@ Use one shared filter: inclusive `start_date` and `end_date` in Australia/Brisba
 
 **Interfaces:** `suppress_table(rows: list[AggregateCell], min_sessions: int = 10) -> SuppressedTable`; suppressed cells return null values and a reason code.
 
-- [ ] Write tests for a small primary cell, a total that would reveal it, a filtered response that could reveal it through a sibling total, and a fully safe table.
-- [ ] Implement primary plus complementary suppression for every tabular payload; do not claim this is a complete real-data disclosure system.
-- [ ] Run focused tests and commit.
+- [x] Write tests for a small primary cell, a total that would reveal it, a filtered response that could reveal it through a sibling total, and a fully safe table.
+- [x] Implement primary plus complementary suppression for every tabular payload; do not claim this is a complete real-data disclosure system.
+- [x] Run focused tests and commit.
 
 ### Task 3: API and validation
 
