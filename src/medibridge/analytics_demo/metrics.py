@@ -44,6 +44,21 @@ METRIC_CAVEATS = {
     "unknown_topic_share": "Unknown includes sessions with no classified topic, including sessions with no issue tags. This metric uses session-level filters only.",
 }
 
+MATRIX_PAIRS = frozenset({
+    ("topic_code", "region"),
+    ("service_code", "region"),
+    ("topic_code", "insurer_id"),
+    ("region", "location_basis"),
+})
+_MATRIX_DIMENSION_SQL = {
+    "topic_code": "e.topic_code",
+    "service_code": "e.service_code",
+    "region": "s.region",
+    "location_basis": "s.location_basis",
+    "insurer_id": "s.insurer_id",
+}
+_MATRIX_EVENT_DIMENSIONS = frozenset({"topic_code", "service_code"})
+
 
 @dataclass(frozen=True)
 class AnalyticsFilter:
@@ -215,6 +230,54 @@ def _cell(
         value = numerator / denominator
     support = numerator if distinct_sessions is None else distinct_sessions
     return AggregateCell(dimensions, numerator, denominator, value, support)
+
+
+def read_matrix_cells(
+    conn: sqlite3.Connection,
+    filters: AnalyticsFilter,
+    row_dimension: str,
+    column_dimension: str,
+) -> list[AggregateCell]:
+    """Read an allowlisted two-dimensional session rate matrix."""
+    pair = (row_dimension, column_dimension)
+    if pair not in MATRIX_PAIRS:
+        raise ValueError("matrix pair is not supported")
+    _validate_store_filters(conn, filters)
+
+    row_sql = _MATRIX_DIMENSION_SQL[row_dimension]
+    column_sql = _MATRIX_DIMENSION_SQL[column_dimension]
+    cohort_clauses, cohort_values = _cohort_where(filters)
+    event_clauses, event_values = _event_where(filters)
+    needs_events = bool(event_clauses) or bool(pair[0] in _MATRIX_EVENT_DIMENSIONS or pair[1] in _MATRIX_EVENT_DIMENSIONS)
+    from_sql = (
+        "sessions s JOIN messages m ON m.session_id = s.session_id "
+        "JOIN issue_events e ON e.message_id = m.message_id"
+        if needs_events
+        else "sessions s"
+    )
+    clauses = cohort_clauses + (event_clauses if needs_events else [])
+    where = _where_sql(clauses)
+    rows = conn.execute(
+        f"""SELECT {row_sql}, {column_sql}, COUNT(DISTINCT s.session_id)
+            FROM {from_sql}{where}
+            GROUP BY {row_sql}, {column_sql}
+            ORDER BY {row_sql}, {column_sql}""",
+        cohort_values + (event_values if needs_events else []),
+    ).fetchall()
+
+    row_counts: dict[str, int] = {}
+    for row in rows:
+        row_counts[str(row[0])] = row_counts.get(str(row[0]), 0) + row[2]
+    return [
+        AggregateCell(
+            {row_dimension: str(row[0]), column_dimension: str(row[1])},
+            row[2],
+            row_counts[str(row[0])],
+            1000.0 * row[2] / row_counts[str(row[0])] if row_counts[str(row[0])] else 0.0,
+            row[2],
+        )
+        for row in rows
+    ]
 
 
 def read_metrics(

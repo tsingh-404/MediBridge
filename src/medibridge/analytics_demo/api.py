@@ -16,12 +16,14 @@ from medibridge.analytics_demo.disclosure import SuppressedCell, suppress_table
 from medibridge.analytics_demo.metrics import (
     AggregateCell,
     AnalyticsFilter,
+    MATRIX_PAIRS,
     MetricResult,
     STORE_END,
     STORE_START,
     _cohort_where,
     _event_where,
     _where_sql,
+    read_matrix_cells,
     read_metrics,
 )
 from medibridge.analytics_demo.scenarios import (
@@ -527,6 +529,153 @@ def _trend_tables(conn: sqlite3.Connection, filters: AnalyticsFilter, bucket: st
     return tables
 
 
+def _timeline_tables(conn: sqlite3.Connection, filters: AnalyticsFilter) -> dict[str, dict[str, Any]]:
+    session_filters = replace(filters, topic_code=None, service_code=None, concern_code=None)
+    session_months = _grouped_cells(conn, session_filters, ("month",))
+    session_table = _table(
+        "selected_sessions_by_month",
+        "sessions",
+        session_months,
+        "Monthly selected synthetic sessions include unknown geography and unknown-topic sessions.",
+    )
+    session_table["filters_applied"] = _filters_applied(session_filters)
+    tables = {"selected_sessions_by_month": session_table}
+
+    cohort_clauses, cohort_values = _cohort_where(session_filters)
+    cohort_where = _where_sql(cohort_clauses)
+    selected_months = {
+        row[0]: row[1]
+        for row in conn.execute(
+            f"""SELECT strftime('%Y-%m', s.started_at_utc, '+10 hours'), COUNT(DISTINCT s.session_id)
+                FROM sessions s{cohort_where}
+                GROUP BY 1 ORDER BY 1""",
+            cohort_values,
+        )
+    }
+    baseline_filters = replace(session_filters, start_date=None, end_date=None)
+    baseline_clauses, baseline_values = _cohort_where(baseline_filters)
+    baseline_where = _where_sql(baseline_clauses)
+    baseline_months = {
+        row[0]: row[1]
+        for row in conn.execute(
+            f"""SELECT strftime('%Y-%m', s.started_at_utc, '+10 hours'), COUNT(DISTINCT s.session_id)
+                FROM sessions s{baseline_where}
+                GROUP BY 1 ORDER BY 1""",
+            baseline_values,
+        )
+    }
+    event_clauses, event_values = _event_where(filters)
+    topic_codes = (filters.topic_code,) if filters.topic_code else tuple(sorted(TOPIC_CODES))
+    current_event_clauses = cohort_clauses + event_clauses
+    current_event_where = _where_sql(current_event_clauses)
+    current_topics = {
+        (row[0], row[1]): row[2]
+        for row in conn.execute(
+            f"""SELECT strftime('%Y-%m', s.started_at_utc, '+10 hours'), e.topic_code,
+                       COUNT(DISTINCT s.session_id)
+                FROM sessions s JOIN messages m ON m.session_id = s.session_id
+                JOIN issue_events e ON e.message_id = m.message_id{current_event_where}
+                GROUP BY 1, 2""",
+            cohort_values + event_values,
+        )
+    }
+    baseline_event_clauses, baseline_event_values = _event_where(
+        replace(filters, start_date=None, end_date=None)
+    )
+    baseline_topic_where = _where_sql(baseline_clauses + baseline_event_clauses)
+    baseline_topics = {
+        (row[0], row[1]): row[2]
+        for row in conn.execute(
+            f"""SELECT strftime('%Y-%m', s.started_at_utc, '+10 hours'), e.topic_code,
+                       COUNT(DISTINCT s.session_id)
+                FROM sessions s JOIN messages m ON m.session_id = s.session_id
+                JOIN issue_events e ON e.message_id = m.message_id{baseline_topic_where}
+                GROUP BY 1, 2""",
+            baseline_values + baseline_event_values,
+        )
+    }
+
+    for topic in topic_codes:
+        current_cells: list[AggregateCell] = []
+        baseline_cells: list[AggregateCell] = []
+        extras: list[dict[str, Any]] = []
+        for month, denominator in selected_months.items():
+            numerator = current_topics.get((month, topic), 0)
+            current_rate = 1000.0 * numerator / denominator if denominator else 0.0
+            dimensions = {"topic_code": topic, "month": month}
+            current_cells.append(AggregateCell(dimensions, numerator, denominator, current_rate, numerator))
+            base_month = f"{int(month[:4]) - 1:04d}{month[4:]}"
+            base_denominator = baseline_months.get(base_month)
+            available = base_denominator is not None
+            if available:
+                base_numerator = baseline_topics.get((base_month, topic), 0)
+                baseline_rate = 1000.0 * base_numerator / base_denominator if base_denominator else 0.0
+                baseline_cells.append(
+                    AggregateCell(dimensions, base_numerator, base_denominator, baseline_rate, base_numerator)
+                )
+                extras.append({
+                    "baseline_available": True,
+                    "baseline_numerator": base_numerator,
+                    "baseline_denominator": base_denominator,
+                    "baseline_rate_per_1000": baseline_rate,
+                    "rate_difference_per_1000": current_rate - baseline_rate,
+                })
+            else:
+                extras.append({
+                    "baseline_available": False,
+                    "baseline_numerator": None,
+                    "baseline_denominator": None,
+                    "baseline_rate_per_1000": None,
+                    "rate_difference_per_1000": None,
+                })
+
+        safe = suppress_table(current_cells + baseline_cells)
+        visible_cells = []
+        safe_index = 0
+        baseline_index = 0
+        baseline_by_current = []
+        for extra in extras:
+            baseline_by_current.append(extra["baseline_available"])
+        for current, extra, has_baseline in zip(current_cells, extras, baseline_by_current):
+            current_safe = safe.cells[safe_index]
+            safe_index += 1
+            if has_baseline:
+                baseline_safe = safe.cells[len(current_cells) + baseline_index]
+                baseline_index += 1
+                if current_safe.suppressed or baseline_safe.suppressed:
+                    extra = {
+                        "baseline_available": False,
+                        "baseline_numerator": None,
+                        "baseline_denominator": None,
+                        "baseline_rate_per_1000": None,
+                        "rate_difference_per_1000": None,
+                    }
+            output = _cell_json(current_safe)
+            output["series"] = "current"
+            output.update(extra)
+            visible_cells.append(output)
+
+        table = _table(
+            f"topic_month_rate_{topic}",
+            "sessions_per_1000_selected_sessions",
+            current_cells,
+            "Topic tags can overlap; rates are synthetic question frequency, not prevalence or demand.",
+        )
+        table["cells"] = visible_cells
+        table["suppressed"] = any(cell["suppressed"] for cell in visible_cells)
+        if visible_cells and all(cell["suppressed"] for cell in visible_cells):
+            table["numerator"] = None
+            table["denominator"] = None
+            table["value"] = None
+            table["no_data"] = False
+            table["data_state"] = "suppressed"
+        elif not visible_cells:
+            table["data_state"] = "no_data"
+        table["filters_applied"] = _filters_applied(filters)
+        tables[f"topic_month_rates.{topic}"] = table
+    return tables
+
+
 def _meta_values(conn: sqlite3.Connection) -> dict[str, Any]:
     start, end = conn.execute(
         "SELECT MIN(date(started_at_utc, '+10 hours')), MAX(date(started_at_utc, '+10 hours')) FROM sessions"
@@ -636,6 +785,36 @@ def create_app(db_path: str | Path = DEFAULT_DB) -> FastAPI:
             "trend", filters, _provenance(conn, filters), tables, primary,
             "Artificial demonstration pattern only; not surveillance, an outbreak signal, or a causal estimate.",
             {"time_bucket": bucket},
+        )
+
+    @app.get("/api/demo/timeline")
+    def timeline(request: Request, conn: sqlite3.Connection = Depends(_connection)):
+        filters = _filters(request, conn)
+        tables = _timeline_tables(conn, filters)
+        return _response(
+            "timeline", filters, _provenance(conn, filters), tables, "selected_sessions_by_month",
+            "Monthly synthetic counts and topic rates support chart exploration only; topic categories overlap.",
+        )
+
+    @app.get("/api/demo/matrix")
+    def matrix(request: Request, conn: sqlite3.Connection = Depends(_connection)):
+        filters = _filters(request, conn, ("pair",))
+        raw_pair = request.query_params.get("pair")
+        pair = tuple(raw_pair.split(":")) if raw_pair is not None else ()
+        if len(pair) != 2 or pair not in MATRIX_PAIRS:
+            raise HTTPException(status_code=422, detail="pair must be an allowed row:column dimension pair")
+        cells = read_matrix_cells(conn, filters, pair[0], pair[1])
+        table = _table(
+            "sessions_per_1000_row_sessions",
+            "sessions_per_1000_row_sessions",
+            cells,
+            "Each cell is distinct synthetic sessions per 1,000 sessions in its row group.",
+        )
+        tables = {"matrix": table}
+        return _response(
+            "matrix", filters, _provenance(conn, filters), tables, "matrix",
+            "Unknown categories remain explicit; cell rates are descriptive synthetic aggregates.",
+            {"matrix_pair": {"row": pair[0], "column": pair[1]}},
         )
 
     @app.get("/api/demo/regions")

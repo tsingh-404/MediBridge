@@ -75,6 +75,39 @@ def test_filtered_sibling_totals_are_hidden_with_primary_cell():
     assert result.cells[2].value is None
 
 
+def test_matrix_suppression_hides_cells_needed_for_row_or_column_totals():
+    disclosure = _disclosure()
+    rows = [
+        _cell({"topic_code": "primary_care", "region": "Brisbane"}, 4, numerator=4, denominator=20),
+        _cell({"topic_code": "primary_care", "region": "Gold Coast"}, 16, numerator=16, denominator=20),
+        _cell({"topic_code": "pharmacy_medicines", "region": "Brisbane"}, 12, numerator=12, denominator=20),
+        _cell({"topic_code": "pharmacy_medicines", "region": "Gold Coast"}, 18, numerator=18, denominator=20),
+    ]
+
+    result = disclosure.suppress_table(rows)
+
+    assert len(result.cells) == 4
+    assert all(cell.suppressed for cell in result.cells)
+    assert all(cell.numerator is None and cell.denominator is None and cell.value is None
+               and cell.distinct_sessions is None for cell in result.cells)
+
+
+def test_separate_topic_tables_suppress_independently():
+    disclosure = _disclosure()
+
+    hidden_topic = disclosure.suppress_table([
+        _cell({"topic_code": "primary_care", "month": "2025-01"}, 3, numerator=3, denominator=20),
+        _cell({"topic_code": "primary_care", "month": "2025-02"}, 17, numerator=17, denominator=30),
+    ])
+    other_topic = disclosure.suppress_table([
+        _cell({"topic_code": "coverage_waiting_period", "month": "2025-01"}, 14, numerator=14, denominator=20),
+        _cell({"topic_code": "coverage_waiting_period", "month": "2025-02"}, 17, numerator=17, denominator=30),
+    ])
+
+    assert all(cell.suppressed for cell in hidden_topic.cells)
+    assert all(not cell.suppressed for cell in other_topic.cells)
+
+
 def test_fully_safe_table_preserves_aggregate_values():
     disclosure = _disclosure()
     rows = [

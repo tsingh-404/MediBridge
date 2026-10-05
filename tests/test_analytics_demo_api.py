@@ -34,6 +34,8 @@ ENDPOINTS = [
     "/api/demo/overview",
     "/api/demo/topics",
     "/api/demo/trend",
+    "/api/demo/timeline",
+    "/api/demo/matrix",
     "/api/demo/regions",
     "/api/demo/coverage-friction",
     "/api/demo/quality",
@@ -124,9 +126,12 @@ def _walk(value):
 
 @pytest.mark.parametrize("path", ENDPOINTS)
 def test_every_endpoint_returns_safe_synthetic_envelope(analytics_client, path):
+    params = {"start_date": "2025-01-01", "end_date": "2025-01-31", "region": "Brisbane"}
+    if path == "/api/demo/matrix":
+        params["pair"] = "topic_code:region"
     response = analytics_client.get(
         path,
-        params={"start_date": "2025-01-01", "end_date": "2025-01-31", "region": "Brisbane"},
+        params=params,
     )
 
     assert response.status_code == 200
@@ -362,6 +367,75 @@ def test_week_bucket_is_available_and_uses_week_start_dimension(analytics_client
     assert response.status_code == 200
     assert response.json()["time_bucket"] == "week"
     assert all("week" in cell["dimensions"] for cell in response.json()["cells"])
+
+
+def test_timeline_returns_month_tables_with_trend_baseline_fields(analytics_client):
+    response = analytics_client.get(
+        "/api/demo/timeline",
+        params={"region": "Brisbane", "location_basis": "stated_demo_region"},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["endpoint"] == "timeline"
+    assert payload["filters_applied"]["region"] == "Brisbane"
+    assert payload["filters_applied"]["location_basis"] == "stated_demo_region"
+    assert "selected_sessions_by_month" in payload["tables"]
+    session_cells = payload["tables"]["selected_sessions_by_month"]["cells"]
+    assert session_cells
+    assert all("month" in cell["dimensions"] for cell in session_cells)
+    topic_tables = [name for name in payload["tables"] if name.startswith("topic_month_rates.")]
+    assert topic_tables
+    for name in topic_tables:
+        assert all(cell["dimensions"]["topic_code"] == name.split(".", 1)[1]
+                   for cell in payload["tables"][name]["cells"])
+        for cell in payload["tables"][name]["cells"]:
+            assert "month" in cell["dimensions"]
+            assert {"baseline_available", "baseline_numerator", "baseline_denominator",
+                    "baseline_rate_per_1000", "rate_difference_per_1000"}.issubset(cell)
+
+
+def test_matrix_has_allowlisted_dimensions_and_keeps_unknown_categories(analytics_client):
+    response = analytics_client.get("/api/demo/matrix", params={"pair": "topic_code:region"})
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["endpoint"] == "matrix"
+    assert payload["matrix_pair"] == {"row": "topic_code", "column": "region"}
+    table = payload["tables"]["matrix"]
+    assert table["unit"] == "sessions_per_1000_row_sessions"
+    assert any(cell["dimensions"].get("topic_code") == "unknown_unclassified" for cell in table["cells"])
+    assert any(cell["dimensions"].get("region") == "unknown" for cell in table["cells"])
+    assert all("session_id" not in cell["dimensions"] for cell in table["cells"])
+
+
+@pytest.mark.parametrize(
+    "pair",
+    ["service_code:region", "topic_code:insurer_id", "region:location_basis"],
+)
+def test_matrix_accepts_each_other_allowlisted_pair(analytics_client, pair):
+    response = analytics_client.get("/api/demo/matrix", params={"pair": pair})
+
+    assert response.status_code == 200
+    assert response.json()["matrix_pair"] == {
+        "row": pair.split(":")[0],
+        "column": pair.split(":")[1],
+    }
+
+
+@pytest.mark.parametrize("pair", [None, "topic_code", "topic_code:topic_code", "session_id:region",
+                                  "region:location_basis:topic_code", "topic_code:"])
+def test_matrix_rejects_missing_or_invalid_pairs(analytics_client, pair):
+    params = {} if pair is None else {"pair": pair}
+    assert analytics_client.get("/api/demo/matrix", params=params).status_code == 422
+
+
+def test_matrix_rejects_duplicate_pair_and_unknown_query_parameters(analytics_client):
+    duplicate = analytics_client.get("/api/demo/matrix?pair=topic_code:region&pair=service_code:region")
+    unknown = analytics_client.get("/api/demo/matrix", params={"pair": "topic_code:region", "raw": "1"})
+
+    assert duplicate.status_code == 422
+    assert unknown.status_code == 422
 
 
 def test_unsupported_time_bucket_returns_422(analytics_client):
