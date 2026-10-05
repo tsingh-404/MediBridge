@@ -77,6 +77,15 @@ export function trendLineSegments(values) {
   return segments;
 }
 
+export function trendTickIndices(count, maxTicks) {
+  const size = Math.max(0, Math.floor(Number(count) || 0));
+  if (!size) return [];
+  const limit = Math.max(1, Math.floor(Number(maxTicks) || 1));
+  if (size <= limit) return Array.from({ length: size }, (_, index) => index);
+  if (limit === 1) return [0];
+  return Array.from({ length: limit }, (_, index) => Math.round(index * (size - 1) / (limit - 1)));
+}
+
 export function labelCode(value = '') {
   if (value === 'unknown_unclassified' || value === 'unknown_not_assessed' || value === 'unknown') return 'Unknown';
   return value

@@ -1,6 +1,6 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { AggregateTable } from './AggregateTable.jsx';
-import { cellDimensions, formatCell, formatRateDifference, labelCode, tableCells, trendBaseline, trendCategories, trendCellSeries, trendLineSegments } from './data.js';
+import { cellDimensions, formatCell, formatRateDifference, labelCode, tableCells, trendBaseline, trendCategories, trendCellSeries, trendLineSegments, trendTickIndices } from './data.js';
 
 export function RankedBars({ title, table, filterField, onSelect, limit = 8 }) {
   const cells = tableCells(table).slice(0, limit);
@@ -28,6 +28,14 @@ export function RankedBars({ title, table, filterField, onSelect, limit = 8 }) {
 }
 
 export function MonthlyTrend({ table, title = 'Monthly question rate', filters, filterField = 'topic_code', scenarioVersions = [] }) {
+  const [axisMaxTicks, setAxisMaxTicks] = useState(() => typeof window === 'undefined' || window.innerWidth > 600 ? 12 : 5);
+  useEffect(() => {
+    const media = window.matchMedia('(max-width: 600px)');
+    const update = () => setAxisMaxTicks(media.matches ? 5 : 12);
+    update();
+    media.addEventListener('change', update);
+    return () => media.removeEventListener('change', update);
+  }, []);
   const cells = trendCellSeries(table, filterField);
   if (!filters?.[filterField]) {
     const dimensionLabel = filterField === 'concern_code' ? 'concern' : 'topic';
@@ -38,6 +46,7 @@ export function MonthlyTrend({ table, title = 'Monthly question rate', filters, 
   }
   const series = cells;
   const months = [...new Set(series.map((cell) => cell.dimensions?.month || cell.dimensions?.period))].filter(Boolean).sort();
+  const axisTicks = new Set(trendTickIndices(months.length, axisMaxTicks));
   const categories = trendCategories(series, filterField).slice(0, 4);
   const categoryLabel = filterField === 'concern_code' ? 'selected concern' : 'selected topic';
   const titleId = `monthly-trend-${filterField}-title`;
@@ -83,7 +92,7 @@ export function MonthlyTrend({ table, title = 'Monthly question rate', filters, 
             const currentY = point.current === null ? null : yForValue(point.current);
             const baselineY = point.baseline === null ? null : yForValue(point.baseline);
             return <g key={point.month}>
-              <text className="trend-month-tick" x={x} y="207" textAnchor="middle">{point.month}</text>
+              {axisTicks.has(index) && <text className="trend-month-tick" x={x} y="207" textAnchor="middle">{point.month}</text>}
               {currentY !== null && <circle className="trend-current-point" cx={x} cy={currentY} r="5" />}
               {baselineY !== null && <circle className="trend-baseline-point" cx={x} cy={baselineY} r="5" />}
               {point.artificial && currentY !== null && <text className="scenario-point-label" x={x} y={currentY - 10} textAnchor="middle">Artificial demonstration pattern</text>}

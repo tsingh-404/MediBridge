@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { tableState, trendCategories, trendCellSeries, trendBaseline, trendLineSegments } from '../../analytics_ui/components/data.js';
+import { tableState, trendCategories, trendCellSeries, trendBaseline, trendLineSegments, trendTickIndices } from '../../analytics_ui/components/data.js';
 import { resolveView } from '../../analytics_ui/filters.js';
 import { POLICY_SCENARIO_CAVEAT } from '../../analytics_ui/scenarios.js';
 
@@ -45,6 +45,13 @@ test('trend lines break at missing or suppressed monthly values', () => {
     [{ index: 2, value: 4 }],
     [{ index: 4, value: 8 }],
   ]);
+});
+
+test('trend axis ticks are sparse at narrow width while spanning the full series', () => {
+  assert.deepEqual(trendTickIndices(24, 5), [0, 6, 12, 17, 23]);
+  assert.deepEqual(trendTickIndices(24, 12), [0, 2, 4, 6, 8, 10, 13, 15, 17, 19, 21, 23]);
+  assert.deepEqual(trendTickIndices(3, 5), [0, 1, 2]);
+  assert.deepEqual(trendTickIndices(0, 5), []);
 });
 
 test('available tables with hidden siblings report partial suppression', () => {
