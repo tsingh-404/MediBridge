@@ -37,17 +37,22 @@ def test_scenarios_produce_nonempty_fictional_messages_and_allowlisted_tags():
 
 def test_service_search_area_is_never_labeled_as_stated_region():
     scenarios = [scenario_for(99, index, "2026-04-03T00:00:00Z") for index in range(1000)]
+    user_text = lambda scenario: " ".join(
+        message.content for message in scenario.messages if message.role == "user"
+    )
 
-    assert any(scenario.location_basis == "service_search_area" for scenario in scenarios)
+    search_scenarios = [s for s in scenarios if s.location_basis == "service_search_area"]
+    stated_scenarios = [s for s in scenarios if s.location_basis == "stated_demo_region"]
+    assert search_scenarios
+    assert stated_scenarios
+    assert all(f"service search area is {s.region}." in user_text(s) for s in search_scenarios)
+    assert all(f"I state {s.region} as my demo region." in user_text(s) for s in stated_scenarios)
     assert all(
-        scenario.location_basis != "stated_demo_region"
-        for scenario in scenarios
-        if scenario.location_basis == "service_search_area"
+        "I state " not in user_text(s)
+        for s in scenarios
+        if s.location_basis != "stated_demo_region"
     )
-    assert all(
-        scenario.location_basis == "unknown" or scenario.region != "unknown"
-        for scenario in scenarios
-    )
+    assert all(s.region != "unknown" for s in scenarios if s.location_basis != "unknown")
 
 
 def test_schedule_injects_documented_respiratory_and_coverage_spikes():
@@ -101,6 +106,16 @@ def test_mix_includes_required_stable_unclassified_and_mixed_topics():
     } <= observed_topics
     assert any(len(scenario.issue_tags) > 1 for scenario in scenarios)
     assert any(scenario.scenario_code == "control_stable" for scenario in scenarios)
+
+
+def test_deterministic_mixed_topic_turn_tags_two_topics_on_one_user_message():
+    scenario = scenario_for(88, 42, "2026-04-03T00:00:00Z")
+    topic_tags = {tag.topic_code: tag.message_index for tag in scenario.issue_tags}
+
+    assert len(topic_tags) >= 2
+    assert len(set(topic_tags.values())) == 1
+    index = next(iter(topic_tags.values()))
+    assert scenario.messages[index].role == "user"
 
 
 def test_scenario_for_is_repeatable_for_same_inputs():

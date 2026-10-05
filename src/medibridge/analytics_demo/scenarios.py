@@ -212,6 +212,9 @@ def scenario_for(seed: int, sequence_no: int, started_at_utc: str) -> Scenario:
     elif date(2025, 10, 1) <= scenario_date < date(2026, 1, 1) and rng.random() < 0.48:
         scenario_code = "coverage_information_spike"
         issue_keys = [rng.choice(("waiting_period", "claims_process", "benefit_exclusion"))]
+    elif sequence_no % 97 == 42:
+        scenario_code = "mixed_topic_turn"
+        issue_keys = ["primary_care", "pharmacy"]
     else:
         scenario_code = "control_stable"
         issue_keys = [rng.choice(_STABLE_ISSUES if rng.random() < 0.72 else _ALL_ISSUES)]
@@ -223,15 +226,25 @@ def scenario_for(seed: int, sequence_no: int, started_at_utc: str) -> Scenario:
     region, location_basis, location_context = _location(rng)
     first = _ISSUES[issue_keys[0]]
     second = _ISSUES[issue_keys[1]] if len(issue_keys) > 1 else None
+    same_turn_mixed = scenario_code == "mixed_topic_turn"
     messages = (
-        DialogueMessage("user", first[4] + location_context),
+        DialogueMessage(
+            "user",
+            first[4] + location_context + (f" Also, {second[4]}" if same_turn_mixed else ""),
+        ),
         DialogueMessage("assistant", first[5]),
-        DialogueMessage("user", second[4] if second else "Thanks, that gives me a starting point."),
-        DialogueMessage("assistant", second[5] if second else "You are welcome. Check current details with the relevant service."),
+        DialogueMessage(
+            "user",
+            second[4] if second and not same_turn_mixed else "Thanks, that gives me a starting point.",
+        ),
+        DialogueMessage(
+            "assistant",
+            second[5] if second and not same_turn_mixed else "You are welcome. Check current details with the relevant service.",
+        ),
     )
     issue_tags = tuple(
         IssueTag(
-            message_index=0 if index == 0 else 2,
+            message_index=0 if index == 0 or same_turn_mixed else 2,
             topic_code=issue[0],
             service_code=issue[1],
             concern_code=issue[2],
