@@ -1,0 +1,85 @@
+# Phase 2 Task 2 — Disclosure control report
+
+**Status:** Complete  
+**Branch:** `phase2-analytics-api`  
+**Plan:** `docs/plans/02-analytics-api.md`  
+**Scope:** Task 2 only; Task 3 has not started.
+
+**Implementation commit:** `e904d0f` (`Add synthetic aggregate suppression`).
+
+## Delivered
+
+- Added `suppress_table(rows, min_sessions=10)` in `src/medibridge/analytics_demo/disclosure.py`, returning `SuppressedTable` and `SuppressedCell` values with explicit `suppressed` state and `reason_code`.
+- Primary suppression uses each cell's explicit `distinct_sessions` support count. Suppressed cells return null for numerator, denominator, value, and support count; they never return fake zeroes.
+- Added `distinct_sessions` support to `AggregateCell`. All metric results set it; `question_turns` now counts distinct selected sessions with at least one matched user question separately from its user-turn numerator.
+- Added complementary suppression for one table: when a primary cell exists, every other cell in that supplied table is also suppressed. The current cell interface has no hierarchy metadata, so this deliberately conservative rule protects totals, marginals, and sibling filter rows supplied together.
+- The disclosure boundary accepts only allowlisted dimensions and taxonomy/geography values. Month dimensions must use `YYYY-MM` granularity. This prevents identifier dimensions and exact timestamps from being returned through this interface.
+- The returned caveat says the prototype threshold is not a real-data safety threshold and does not guarantee disclosure safety.
+- Marked Task 2 checkboxes only in the Phase 2 plan.
+
+## TDD evidence
+
+All test commands used `.venv\Scripts\python.exe`.
+
+**RED — missing disclosure module and support-count contract:**
+
+```text
+.venv\Scripts\python.exe -m pytest tests/test_analytics_demo_disclosure.py -q
+8 failed in 0.18s
+ModuleNotFoundError: No module named 'medibridge.analytics_demo.disclosure'
+```
+
+The metric support-count assertion was also run before implementation:
+
+```text
+.venv\Scripts\python.exe -m pytest tests/test_analytics_demo_metrics.py::test_question_turns_count_distinct_user_messages_not_issue_events -q
+1 failed in 0.13s
+AttributeError: 'AggregateCell' object has no attribute 'distinct_sessions'
+```
+
+**RED — identifier dimensions:**
+
+```text
+.venv\Scripts\python.exe -m pytest tests/test_analytics_demo_disclosure.py::test_suppression_rejects_row_level_identifier_dimensions -q
+1 failed in 0.10s
+Failed: DID NOT RAISE <class 'ValueError'>
+```
+
+**RED — exact timestamps:**
+
+```text
+.venv\Scripts\python.exe -m pytest tests/test_analytics_demo_disclosure.py::test_suppression_rejects_exact_timestamp_as_a_month_dimension -q
+1 failed in 0.10s
+Failed: DID NOT RAISE <class 'ValueError'>
+```
+
+**GREEN — review behavior and metric support:**
+
+```text
+.venv\Scripts\python.exe -m pytest tests/test_analytics_demo_disclosure.py -q
+..........                                                               [100%]
+10 passed in 0.03s
+```
+
+```text
+.venv\Scripts\python.exe -m pytest tests/test_analytics_demo_metrics.py -q
+..............                                                           [100%]
+14 passed in 0.33s
+```
+
+**GREEN — full repository suite:**
+
+```text
+.venv\Scripts\python.exe -m pytest -q
+........................................................................ [ 78%]
+...................s                                                     [100%]
+91 passed, 1 skipped in 7.39s
+```
+
+## Self-review and Task 3 handoff
+
+The suppression function only has the rows passed to a single invocation. Its complementary suppression therefore covers all sibling cells in that table, including an included narrow-filter cell and before/after siblings. It cannot compare independent API requests. The plan's before/after-filter review focus is **not satisfied by this table-only function**.
+
+Task 3 needs an API-level release rule before endpoints expose repeated filtered results. Concrete design question: should the API restrict overlapping filter comparisons, or maintain a release policy that suppresses/rejects a result when it could be differenced against previously released aggregates? A response-history cache alone cannot retract a value already returned, so the API decision must account for earlier broad responses as well as later narrow ones.
+
+The global synthetic-only caveat remains explicit. Threshold 10 is a demo convention, not a claim of real-data safety or a complete real-world disclosure-control system. No student routes/UI or `data/medibridge.db` were changed.
