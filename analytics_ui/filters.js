@@ -67,3 +67,9 @@ export function serializeFilters(filters = {}) {
   }
   return params;
 }
+
+export function resolveView(input, allowedViews = ['overview']) {
+  const params = paramsFrom(input);
+  const values = params.getAll('view');
+  return values.length === 1 && allowedViews.includes(values[0]) ? values[0] : 'overview';
+}

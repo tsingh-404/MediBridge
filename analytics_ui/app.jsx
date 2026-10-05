@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { fetchAggregate } from './api.js';
-import { parseFilters, resetFilters, serializeFilters } from './filters.js';
+import { parseFilters, resolveView, serializeFilters } from './filters.js';
 import { FilterBar } from './components/FilterBar.jsx';
 import { Provenance } from './components/Provenance.jsx';
 import { StateMessage } from './components/StateMessage.jsx';
@@ -22,7 +22,7 @@ const VIEWS = [
 function App() {
   const [meta, setMeta] = useState(null);
   const [filters, setFilters] = useState({});
-  const [view, setView] = useState(new URLSearchParams(location.search).get('view') || 'overview');
+  const [view, setView] = useState(resolveView(new URLSearchParams(location.search), VIEWS.map((item) => item.id)));
   const [audience, setAudience] = useState('insurer');
   const [payloads, setPayloads] = useState({});
   const [loading, setLoading] = useState(true);

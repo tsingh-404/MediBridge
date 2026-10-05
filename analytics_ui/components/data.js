@@ -10,6 +10,12 @@ export function formatCell(cell, unit = '') {
   return wholeNumber.format(value);
 }
 
+export function formatRateDifference(value) {
+  if (value === null || value === undefined || !Number.isFinite(Number(value))) return 'Not available';
+  const difference = Number(value);
+  return `${difference > 0 ? '+' : ''}${oneDecimal.format(difference)} / 1,000`;
+}
+
 export function sortCells(cells = [], key = 'value', direction = 'desc') {
   const multiplier = direction === 'asc' ? 1 : -1;
   return [...cells].sort((left, right) => {
@@ -27,8 +33,48 @@ export function sortCells(cells = [], key = 'value', direction = 'desc') {
 export function tableState(table) {
   if (!table) return 'unavailable';
   if (table.no_data || table.data_state === 'no_data') return 'no_data';
-  if (table.suppressed || table.data_state === 'suppressed') return 'suppressed';
+  if (table.data_state === 'suppressed') return 'suppressed';
+  const cells = tableCells(table);
+  const hiddenCells = cells.filter((cell) => cell.suppressed || cell.value == null);
+  if (cells.length > 0 && hiddenCells.length === cells.length) return 'suppressed';
+  if (hiddenCells.length > 0) return 'partially_suppressed';
   return 'available';
+}
+
+export function trendCellSeries(table, filterField) {
+  return tableCells(table).filter((cell) =>
+    (cell.series === 'current' || !cell.series) && cellDimensions(cell)[filterField]
+  );
+}
+
+export function trendCategories(cells, filterField) {
+  return [...new Set(cells.map((cell) => cellDimensions(cell)[filterField]).filter(Boolean))].sort();
+}
+
+export function trendBaseline(cell) {
+  if (!cell?.baseline_available) return { available: false, numerator: null, denominator: null, rate: null, difference: null };
+  return {
+    available: true,
+    numerator: cell.baseline_numerator ?? null,
+    denominator: cell.baseline_denominator ?? null,
+    rate: cell.baseline_rate_per_1000 ?? null,
+    difference: cell.rate_difference_per_1000 ?? null,
+  };
+}
+
+export function trendLineSegments(values) {
+  const segments = [];
+  let active = [];
+  values.forEach((value, index) => {
+    if (value === null || value === undefined || !Number.isFinite(Number(value))) {
+      if (active.length) segments.push(active);
+      active = [];
+      return;
+    }
+    active.push({ index, value: Number(value) });
+  });
+  if (active.length) segments.push(active);
+  return segments;
 }
 
 export function labelCode(value = '') {
