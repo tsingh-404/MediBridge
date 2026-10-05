@@ -9,6 +9,8 @@ from typing import Any, Iterator, Mapping
 from urllib.parse import quote
 
 from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi.responses import FileResponse, RedirectResponse
+from fastapi.staticfiles import StaticFiles
 
 from medibridge.analytics_demo.disclosure import SuppressedCell, suppress_table
 from medibridge.analytics_demo.metrics import (
@@ -712,6 +714,21 @@ def create_app(db_path: str | Path = DEFAULT_DB) -> FastAPI:
         }
         return _response("quality", filters, _provenance(conn, filters), tables, "unknown_topic_share",
                          "Unknown values remain visible as aggregate quality measures; no individual record is returned.")
+
+    dashboard_static = Path(__file__).resolve().parent / "static"
+
+    @app.get("/dashboard", include_in_schema=False)
+    def dashboard_redirect():
+        return RedirectResponse("/dashboard/", status_code=307)
+
+    @app.get("/dashboard/", include_in_schema=False)
+    def dashboard_index():
+        if not dashboard_static.is_dir():
+            raise HTTPException(status_code=503, detail="Dashboard assets are not built; run npm run build:analytics in mobile/.")
+        return FileResponse(dashboard_static / "index.html", media_type="text/html")
+
+    if dashboard_static.is_dir():
+        app.mount("/dashboard/assets", StaticFiles(directory=dashboard_static, check_dir=True), name="analytics-dashboard-assets")
 
     return app
 

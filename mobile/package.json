@@ -6,6 +6,7 @@
   "description": "Capacitor shell + web asset build for the MediBridge SPA in ../ui",
   "scripts": {
     "build:web": "node scripts/build-web.mjs",
+    "build:analytics": "node scripts/build-analytics.mjs",
     "fetch:fonts": "node scripts/fetch-fonts.mjs",
     "make:art": "node scripts/make-art.mjs",
     "prepare:www": "node scripts/prepare-www.mjs",
