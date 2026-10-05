@@ -343,3 +343,70 @@ def test_validator_compares_scenario_assignments_to_seeded_ground_truth(tmp_path
 
     assert not report.ok
     assert "scenario_truth_mismatch" in {error.code for error in report.errors}
+
+
+def test_validator_reports_contract_unknown_topic_sessions_separately_from_events(tmp_path):
+    from medibridge.analytics_demo.generate import CLASSIFICATION_VERSION, generate_store
+    from medibridge.analytics_demo.validate import validate_store
+
+    path = tmp_path / "unknown-topic-units.sqlite"
+    generate_store(path, seed=31, session_count=4)
+    conn = sqlite3.connect(path)
+    try:
+        conn.execute("DELETE FROM issue_events")
+        user_messages = dict(conn.execute(
+            "SELECT session_id, message_id FROM messages WHERE turn_index = 0"
+        ))
+        issue_rows = []
+        for index in range(4):
+            issue_rows.append((
+                f"event-classified-{index}", user_messages["demo_session_000000"],
+                "primary_care", "gp", "care_navigation", "resolved", CLASSIFICATION_VERSION,
+            ))
+        issue_rows.extend([
+            ("event-mixed-classified", user_messages["demo_session_000001"],
+             "primary_care", "gp", "care_navigation", "resolved", CLASSIFICATION_VERSION),
+            ("event-mixed-unclassified", user_messages["demo_session_000001"],
+             "unknown_unclassified", "unknown", "unknown", "unknown_not_assessed", CLASSIFICATION_VERSION),
+            ("event-only-unclassified", user_messages["demo_session_000003"],
+             "unknown_unclassified", "unknown", "unknown", "unknown_not_assessed", CLASSIFICATION_VERSION),
+        ])
+        conn.executemany("INSERT INTO issue_events VALUES (?, ?, ?, ?, ?, ?, ?)", issue_rows)
+        conn.execute("UPDATE generation_runs SET issue_event_count = ?", (len(issue_rows),))
+        conn.commit()
+    finally:
+        conn.close()
+
+    report = validate_store(path)
+
+    assert report.metrics["unknown_topic_session_count"] == 2
+    assert report.metrics["unknown_topic_share"] == 0.5
+    assert report.metrics["unclassified_topic_event_count"] == 2
+    assert report.metrics["unclassified_topic_event_share"] == pytest.approx(2 / 7)
+    assert report.metrics["sessions_with_classified_and_unclassified_topics"] == 1
+
+
+def test_validator_rejects_null_region_when_constraint_is_absent(tmp_path):
+    from medibridge.analytics_demo.generate import generate_store
+    from medibridge.analytics_demo.validate import validate_store
+
+    path = tmp_path / "null-region.sqlite"
+    generate_store(path, seed=32, session_count=4)
+    conn = sqlite3.connect(path)
+    try:
+        conn.execute("""CREATE TABLE sessions_rebuilt (
+            session_id TEXT PRIMARY KEY, actor_id TEXT NOT NULL, started_at_utc TEXT NOT NULL,
+            insurer_id TEXT NOT NULL, tier_id TEXT NOT NULL, region TEXT,
+            location_basis TEXT NOT NULL, scenario_code TEXT NOT NULL
+        )""")
+        conn.execute("INSERT INTO sessions_rebuilt SELECT * FROM sessions")
+        conn.execute("DROP TABLE sessions")
+        conn.execute("ALTER TABLE sessions_rebuilt RENAME TO sessions")
+        conn.execute("UPDATE sessions SET region = NULL WHERE session_id = 'demo_session_000000'")
+        conn.commit()
+    finally:
+        conn.close()
+
+    report = validate_store(path)
+
+    assert "invalid_region" in {error.code for error in report.errors}

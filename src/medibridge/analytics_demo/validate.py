@@ -170,7 +170,7 @@ def validate_store(path: Path) -> ValidationReport:
                 if _timestamp_error(value):
                     errors.append(ValidationError("invalid_timestamp", f"Invalid UTC timestamp {value!r}.", table, str(row_id)))
 
-        bad_values("SELECT session_id, region FROM sessions WHERE region NOT IN (%s)" % ",".join("?" * len(REGIONS)), REGIONS,
+        bad_values("SELECT session_id, region FROM sessions WHERE region IS NULL OR region NOT IN (%s)" % ",".join("?" * len(REGIONS)), REGIONS,
                    "invalid_region", "Region is outside the Queensland allowlist", "sessions", "session_id")
         for session_id, region, basis in conn.execute("SELECT session_id, region, location_basis FROM sessions"):
             if basis is None or not str(basis).strip():
@@ -259,7 +259,7 @@ def validate_store(path: Path) -> ValidationReport:
             "share_of_actors_repeated": repeat_counts[0] / counts["rows"]["actors"] if counts["rows"]["actors"] else 0.0,
         }
         unknown_counts = {
-            "topic": conn.execute("SELECT COUNT(*) FROM issue_events WHERE topic_code = 'unknown_unclassified'").fetchone()[0],
+            "unclassified_topic_events": conn.execute("SELECT COUNT(*) FROM issue_events WHERE topic_code = 'unknown_unclassified'").fetchone()[0],
             "service": conn.execute("SELECT COUNT(*) FROM issue_events WHERE service_code = 'unknown'").fetchone()[0],
             "concern": conn.execute("SELECT COUNT(*) FROM issue_events WHERE concern_code = 'unknown'").fetchone()[0],
             "answer_outcome": conn.execute("SELECT COUNT(*) FROM issue_events WHERE answer_outcome = 'unknown_not_assessed'").fetchone()[0],
@@ -270,14 +270,31 @@ def validate_store(path: Path) -> ValidationReport:
         session_total = counts["rows"]["sessions"]
         metrics["unknown_counts"] = unknown_counts
         metrics["unknown_shares"] = {
-            "topic": unknown_counts["topic"] / event_total if event_total else 0.0,
             "service": unknown_counts["service"] / event_total if event_total else 0.0,
             "concern": unknown_counts["concern"] / event_total if event_total else 0.0,
             "answer_outcome": unknown_counts["answer_outcome"] / event_total if event_total else 0.0,
             "region": unknown_counts["region"] / session_total if session_total else 0.0,
             "location_basis": unknown_counts["location_basis"] / session_total if session_total else 0.0,
         }
-        metrics["unknown_topic_share"] = metrics["unknown_shares"]["topic"]
+        classified_topics = tuple(sorted(TOPIC_CODES - {"unknown_unclassified"}))
+        classified_placeholders = ",".join("?" * len(classified_topics))
+        topic_quality = conn.execute(
+            "SELECT SUM(has_classified = 0), SUM(has_classified = 1 AND has_unclassified = 1) "
+            "FROM (SELECT s.session_id, "
+            f"MAX(CASE WHEN e.topic_code IN ({classified_placeholders}) THEN 1 ELSE 0 END) AS has_classified, "
+            "MAX(CASE WHEN e.topic_code = 'unknown_unclassified' THEN 1 ELSE 0 END) AS has_unclassified "
+            "FROM sessions s LEFT JOIN messages m ON m.session_id = s.session_id "
+            "LEFT JOIN issue_events e ON e.message_id = m.message_id GROUP BY s.session_id)",
+            classified_topics,
+        ).fetchone()
+        unknown_topic_sessions = topic_quality[0] or 0
+        metrics["unknown_topic_session_count"] = unknown_topic_sessions
+        metrics["unknown_topic_share"] = unknown_topic_sessions / session_total if session_total else 0.0
+        metrics["unclassified_topic_event_count"] = unknown_counts["unclassified_topic_events"]
+        metrics["unclassified_topic_event_share"] = (
+            unknown_counts["unclassified_topic_events"] / event_total if event_total else 0.0
+        )
+        metrics["sessions_with_classified_and_unclassified_topics"] = topic_quality[1] or 0
         metrics["unknown_region_share"] = metrics["unknown_shares"]["region"]
         for code, (start, end) in SCENARIO_WINDOWS.items():
             observed = conn.execute(

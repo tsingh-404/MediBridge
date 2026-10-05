@@ -183,7 +183,7 @@ EXIT_CODE=0
 
 The database is 72,208,384 bytes (68.86 MiB), SHA-256 `6d84de1fde6edd95d46858d15cae643c845a895c808b74ac7574251712618e0d`. It contains 35,000 actors, 50,000 sessions, 200,000 messages, 53,533 issue events, and one generation-run row. There are 3,500 repeated actors (10%) representing 18,500 sessions. Session timestamps run from `2024-10-01T03:35:51Z` to `2026-09-30T21:08:21Z`.
 
-Topic counts and scenario counts/windows are in the exact validator output above and in `docs/research/synthetic-data-dictionary.md`. Unknown shares are: topic 5.223%, service 5.223%, concern 5.223%, answer outcome 27.622%, region 20.188%, and location basis 20.188%. The respiratory scenario window is 2025-01-01–2025-03-31 inclusive; the coverage-information window is 2025-10-01–2025-12-31 inclusive. Their observed timestamps fell within the expected windows.
+Topic counts and scenario counts/windows are in the exact validator output above and in `docs/research/synthetic-data-dictionary.md`. The original validator run above reported unclassified topic events as an unknown-topic share; Fix round 2 below corrects that contract mismatch. The respiratory scenario window is 2025-01-01–2025-03-31 inclusive; the coverage-information window is 2025-10-01–2025-12-31 inclusive. Their observed timestamps fell within the expected windows.
 
 ## Changed files
 
@@ -282,3 +282,50 @@ The CLI's full JSON output, including topic counts, timestamp bounds, unknown sh
 * `docs/research/synthetic-data-dictionary.md` — describe seeded scenario replay and malformed-file reporting.
 
 The scenario-truth check depends on the generated session ID format and latest `generation_runs.seed`, both of which are part of this store's generator contract. It skips replay when a session ID or timestamp cannot be parsed; those timestamp errors are reported by the separate timestamp validation. There are no blocking concerns.
+
+## Fix round 2: contract metric units and NULL region
+
+The metric contract defines unknown-topic share at the session level. The validator now counts sessions with no classified topic over all sessions, including sessions with no issue events. A session with any classified topic remains classified even if it also has an `unknown_unclassified` event. The count and share of `unknown_unclassified` events are reported separately with explicit event-level names. Region allowlist validation now explicitly checks `region IS NULL` before `NOT IN`, because SQL NULL values bypass `NOT IN` predicates.
+
+The new tests cover four distinct session states: classified-only, mixed classified and unclassified, no-topic, and unclassified-only. They assert that the mixed session is not included in unknown sessions, while no-topic and unclassified-only sessions are. A second fixture rebuilds the sessions table without its `NOT NULL` constraint and inserts a NULL region to demonstrate that the validator catches it.
+
+TDD RED command:
+
+```text
+.venv\Scripts\python -m pytest tests/test_analytics_demo_generate.py -q -k "unknown_topic_sessions_separately or null_region"
+FF                                                                       [100%]
+2 failed, 18 deselected in 0.28s
+EXIT_CODE=1
+```
+
+The unknown-topic test failed because `unknown_topic_session_count` was absent; the NULL-region fixture failed because no `invalid_region` error was reported. After implementation:
+
+```text
+Command: .venv\Scripts\python -m pytest tests/test_analytics_demo_generate.py -q
+....................                                                     [100%]
+20 passed in 0.68s
+EXIT_CODE=0
+
+Command: .venv\Scripts\python -m pytest -q
+...................................................................s     [100%]
+67 passed, 1 skipped in 5.85s
+EXIT_CODE=0
+```
+
+Full-store validator rerun:
+
+```text
+Command: .venv\Scripts\python -m medibridge.analytics_demo.validate data/analytics_demo.sqlite
+"errors": []
+"file_size_bytes": 72208384
+"sessions_with_classified_and_unclassified_topics": 182
+"unclassified_topic_event_count": 2796
+"unclassified_topic_event_share": 0.052229465936898735
+"unknown_topic_session_count": 2614
+"unknown_topic_share": 0.05228
+"ok": true
+"sha256": "6d84de1fde6edd95d46858d15cae643c845a895c808b74ac7574251712618e0d"
+EXIT_CODE=0
+```
+
+The corrected artifact metrics are 2,614 unknown-topic sessions / 50,000 sessions (5.228%), 2,796 unclassified events / 53,533 issue events (5.223%), and 182 sessions with both classified and unclassified tags. The validator uses a grouped left join for session-level topic quality so this full-store check completes in about seven seconds without repeated per-session scans.
