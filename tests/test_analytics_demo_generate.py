@@ -76,6 +76,23 @@ def test_session_turn_index_must_be_unique(demo_conn):
         )
 
 
+@pytest.mark.parametrize(
+    ("column", "value"),
+    [
+        ("region", "New South Wales"),
+        ("location_basis", "inferred_from_ip"),
+    ],
+)
+def test_sessions_reject_values_outside_geography_allowlists(demo_conn, column, value):
+    session_id = _insert_fixture(demo_conn)
+
+    with pytest.raises(sqlite3.IntegrityError):
+        demo_conn.execute(
+            f"UPDATE sessions SET {column} = ? WHERE session_id = ?",
+            (value, session_id),
+        )
+
+
 @pytest.mark.parametrize("role", ["user", "assistant"])
 def test_messages_accept_allowed_roles(demo_conn, role):
     session_id = _insert_fixture(demo_conn)

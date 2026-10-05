@@ -29,8 +29,14 @@ def create_schema(conn: sqlite3.Connection) -> None:
             started_at_utc TEXT NOT NULL,
             insurer_id TEXT NOT NULL,
             tier_id TEXT NOT NULL,
-            region TEXT NOT NULL,
-            location_basis TEXT NOT NULL,
+            region TEXT NOT NULL CHECK (region IN (
+                'Brisbane', 'Gold Coast', 'Sunshine Coast', 'Darling Downs',
+                'Wide Bay', 'Central Queensland', 'North Queensland',
+                'Far North Queensland', 'unknown'
+            )),
+            location_basis TEXT NOT NULL CHECK (location_basis IN (
+                'stated_demo_region', 'service_search_area', 'unknown'
+            )),
             scenario_code TEXT NOT NULL
         );
 
