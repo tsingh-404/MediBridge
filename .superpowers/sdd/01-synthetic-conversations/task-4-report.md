@@ -201,3 +201,84 @@ The validator independently checks allowlists, timestamp format and parseability
 Personal-data scanning uses explicit pattern matching for email-like text, Australian phone-like strings, student ID/number wording, and long digit runs. It is only a regression guard and cannot establish that arbitrary text is free of identifying information. All topic labels, rates, and spike windows describe synthetic generator construction only.
 
 Concerns: **none blocking.** The quality limitations above are documented in the dictionary; they do not prevent the validator or synthetic artifact from being used for demo development.
+
+## Fix round 1: malformed files and scenario ground truth
+
+**Fix implementation commit:** `b476867` (`Harden analytics store validation`).
+
+Two review findings were addressed after the initial Task 4 implementation:
+
+1. Schema inspection is now guarded. A plain-text file that SQLite only rejects when querying `sqlite_master` returns `ValidationReport(ok=False)` with an `invalid_database` error and empty row counts instead of raising `sqlite3.DatabaseError`. SQLite errors during subsequent integrity or data queries are converted to a report error as well.
+2. Removed the tautological grouped scenario count check. The validator now reads the seed from the latest generation run, parses the sequence number from generated session IDs, and recomputes `scenario_for(seed, sequence_no, started_at_utc)`. A stored code that is valid in the taxonomy but differs from the deterministic ground truth reports `scenario_truth_mismatch`. The independent stored generation-run/session count comparison still reports `scenario_count_mismatch` when its session total is inconsistent.
+
+### TDD and verification
+
+The new plain-text and wrong-scenario tests were added before the fix. RED command and exact result:
+
+```text
+.venv\Scripts\python -m pytest tests/test_analytics_demo_generate.py -q -k "non_sqlite or seeded_ground_truth"
+FF                                                                       [100%]
+______________ test_validator_returns_report_for_non_sqlite_file ______________
+E       sqlite3.DatabaseError: file is not a database
+_____ test_validator_compares_scenario_assignments_to_seeded_ground_truth _____
+E       AssertionError: assert not True
+2 failed, 16 deselected in 0.31s
+EXIT_CODE=1
+```
+
+Focused test file after the fix:
+
+```text
+Command: .venv\Scripts\python -m pytest tests/test_analytics_demo_generate.py -q
+..................                                                       [100%]
+18 passed in 0.70s
+EXIT_CODE=0
+```
+
+Full suite after the fix:
+
+```text
+Command: .venv\Scripts\python -m pytest -q
+.................................................................s       [100%]
+65 passed, 1 skipped in 9.07s
+EXIT_CODE=0
+```
+
+Full-store validator rerun:
+
+```text
+Command: .venv\Scripts\python -m medibridge.analytics_demo.validate data/analytics_demo.sqlite
+{
+  "errors": [],
+  "ok": true,
+  "path": "data\\analytics_demo.sqlite",
+  "counts": {
+    "rows": {
+      "actors": 35000,
+      "generation_runs": 1,
+      "issue_events": 53533,
+      "messages": 200000,
+      "sessions": 50000
+    },
+    "scenarios": {
+      "control_stable": 43660,
+      "coverage_information_spike": 2967,
+      "mixed_topic_turn": 458,
+      "respiratory_spike": 2915
+    }
+  },
+  "file_size_bytes": 72208384,
+  "sha256": "6d84de1fde6edd95d46858d15cae643c845a895c808b74ac7574251712618e0d"
+}
+EXIT_CODE=0
+```
+
+The CLI's full JSON output, including topic counts, timestamp bounds, unknown shares, and scenario windows, was unchanged from the full output recorded above. Both scenario windows remain valid. No 50,000-session regeneration was needed because the generator was unchanged.
+
+### Fix-round files and review
+
+* `src/medibridge/analytics_demo/validate.py` — catch schema inspection errors and add deterministic scenario replay checks; remove the tautological scenario aggregation.
+* `tests/test_analytics_demo_generate.py` — plain-text database and wrong-but-allowlisted scenario corruption cases.
+* `docs/research/synthetic-data-dictionary.md` — describe seeded scenario replay and malformed-file reporting.
+
+The scenario-truth check depends on the generated session ID format and latest `generation_runs.seed`, both of which are part of this store's generator contract. It skips replay when a session ID or timestamp cannot be parsed; those timestamp errors are reported by the separate timestamp validation. There are no blocking concerns.
