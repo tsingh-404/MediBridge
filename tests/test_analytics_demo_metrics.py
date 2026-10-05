@@ -168,3 +168,47 @@ def test_store_value_filters_must_be_present_in_the_synthetic_allowlist(metrics_
             (),
             metrics.AnalyticsFilter(insurer_id="missing-insurer"),
         )
+
+
+def test_empty_session_cohort_returns_a_zero_aggregate(metrics_conn):
+    metrics = _metrics()
+    result = metrics.read_metrics(
+        metrics_conn,
+        "sessions",
+        (),
+        metrics.AnalyticsFilter(insurer_id="insurer_a", region="Gold Coast"),
+    )
+
+    assert len(result.cells) == 1
+    assert result.cells[0].numerator == 0
+    assert result.cells[0].value == 0
+
+
+@pytest.mark.parametrize(
+    "filter_values",
+    [
+        {"start_date": date(2026, 10, 1)},
+        {"end_date": date(2024, 9, 30)},
+    ],
+)
+def test_date_filter_bounds_reject_ranges_beyond_either_end(filter_values):
+    metrics = _metrics()
+
+    with pytest.raises(ValueError, match="outside the available store range"):
+        metrics.AnalyticsFilter(**filter_values)
+
+
+@pytest.mark.parametrize(
+    "event_filter",
+    [
+        {"topic_code": "primary_care"},
+        {"service_code": "gp"},
+        {"concern_code": "care_navigation"},
+    ],
+)
+def test_unknown_topic_share_rejects_event_series_filters(metrics_conn, event_filter):
+    metrics = _metrics()
+    filters = metrics.AnalyticsFilter(**event_filter)
+
+    with pytest.raises(ValueError, match="does not accept topic, service, or concern filters"):
+        metrics.read_metrics(metrics_conn, "unknown_topic_share", (), filters)

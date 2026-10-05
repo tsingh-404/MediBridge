@@ -41,7 +41,7 @@ METRIC_CAVEATS = {
     "question_turns": "A turn is a distinct fictional user message with one or more issue tags.",
     "topic_sessions": "Question tags are not diagnoses; one session may count in multiple topic categories.",
     "topic_rate_per_1000": "Synthetic question frequency only; not prevalence, incidence, demand, or unmet need.",
-    "unknown_topic_share": "Unknown includes sessions with no classified topic, including sessions with no issue tags.",
+    "unknown_topic_share": "Unknown includes sessions with no classified topic, including sessions with no issue tags. This metric uses session-level filters only.",
 }
 
 
@@ -68,6 +68,10 @@ class AnalyticsFilter:
             raise ValueError("start_date must be on or before end_date")
         if self.start_date and self.start_date < STORE_START:
             raise ValueError("start_date is outside the available store range")
+        if self.start_date and self.start_date > STORE_END:
+            raise ValueError("start_date is outside the available store range")
+        if self.end_date and self.end_date < STORE_START:
+            raise ValueError("end_date is outside the available store range")
         if self.end_date and self.end_date > STORE_END:
             raise ValueError("end_date is outside the available store range")
         allowlists = {
@@ -217,6 +221,10 @@ def read_metrics(
         raise TypeError("filters must be an AnalyticsFilter")
     if metric not in METRIC_GROUPS or group_by not in METRIC_GROUPS[metric]:
         raise ValueError("metric and group_by combination is not supported")
+    if metric == "unknown_topic_share" and any(
+        getattr(filters, name) is not None for name in ("topic_code", "service_code", "concern_code")
+    ):
+        raise ValueError("unknown_topic_share does not accept topic, service, or concern filters")
     _validate_store_filters(conn, filters)
 
     cohort_clauses, cohort_values = _cohort_where(filters)
