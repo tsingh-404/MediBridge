@@ -40,4 +40,5 @@ def test_analytics_routes_remain_distinct_from_dashboard_assets(tmp_path):
     assert metadata.json()["data_state"] == "metadata"
     assert dashboard_asset.status_code == 200
     assert metadata.headers["content-type"].startswith("application/json")
-    assert dashboard_asset.headers["content-type"].startswith("text/javascript")
+    javascript_media_type = dashboard_asset.headers["content-type"].split(";", 1)[0].lower()
+    assert javascript_media_type in {"text/javascript", "application/javascript"}
