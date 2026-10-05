@@ -106,6 +106,10 @@ def test_topic_rate_uses_all_sessions_including_unknown_and_no_topic(metrics_con
     assert result.cells[0].numerator == 2
     assert result.cells[0].denominator == 4
     assert result.cells[0].value == 500.0
+    disclosure = importlib.import_module("medibridge.analytics_demo.disclosure")
+    visible = disclosure.suppress_table(list(result.cells), min_sessions=2)
+    assert visible.cells[0].suppressed is False
+    assert visible.cells[0].distinct_sessions == 2
 
 
 def test_unknown_topic_share_includes_unknown_only_and_no_event_sessions(metrics_conn):

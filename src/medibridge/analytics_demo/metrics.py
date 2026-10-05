@@ -285,7 +285,7 @@ def read_metrics(
             cohort_values + event_values,
         ).fetchone()[0]
         rate = (1000.0 * numerator / denominator) if denominator else 0.0
-        cells = (AggregateCell({}, numerator, denominator, rate),)
+        cells = (AggregateCell({}, numerator, denominator, rate, numerator),)
     else:  # unknown_topic_share; event filters do not redefine the selected cohort
         clauses, values = _cohort_where(filters)
         where = _where_sql(clauses)

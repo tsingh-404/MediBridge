@@ -7,9 +7,11 @@ from typing import Mapping
 from medibridge.analytics_demo.metrics import AggregateCell
 from medibridge.analytics_demo.scenarios import (
     CONCERN_CODES,
+    INSURER_CODES,
     LOCATION_BASES,
     REGIONS,
     SERVICE_CODES,
+    TIER_CODES,
     TOPIC_CODES,
 )
 
@@ -53,6 +55,8 @@ _ALLOWED_DIMENSIONS = frozenset(
     }
 )
 _VALUE_ALLOWLISTS = {
+    "insurer_id": INSURER_CODES,
+    "tier_id": TIER_CODES,
     "region": REGIONS,
     "location_basis": LOCATION_BASES,
     "topic_code": TOPIC_CODES,

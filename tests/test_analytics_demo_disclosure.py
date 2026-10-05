@@ -127,3 +127,18 @@ def test_suppression_rejects_exact_timestamp_as_a_month_dimension():
 
     with pytest.raises(ValueError, match="month must use YYYY-MM granularity"):
         disclosure.suppress_table([row])
+
+
+@pytest.mark.parametrize(
+    ("dimension", "value"),
+    [
+        ("insurer_id", "arbitrary-injected-label"),
+        ("tier_id", "arbitrary-injected-label"),
+    ],
+)
+def test_suppression_rejects_unknown_insurer_and_tier_values(dimension, value):
+    disclosure = _disclosure()
+    row = _cell({dimension: value}, 20)
+
+    with pytest.raises(ValueError, match=f"{dimension} is not an allowed value"):
+        disclosure.suppress_table([row])
