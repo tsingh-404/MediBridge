@@ -249,3 +249,60 @@ def test_successful_generation_replaces_a_prior_demo_store(tmp_path):
     assert summary.seed == stored_seed == 2
     assert stored_sessions == 120
     assert list(tmp_path.glob(f".{output.name}.*.tmp")) == []
+
+
+def test_validator_reports_corruption_even_when_constraints_were_bypassed(tmp_path):
+    from medibridge.analytics_demo.generate import generate_store
+    from medibridge.analytics_demo.validate import validate_store
+
+    path = tmp_path / "corrupt-demo.sqlite"
+    generate_store(path, seed=22, session_count=100)
+    conn = sqlite3.connect(path)
+    try:
+        conn.execute("PRAGMA foreign_keys = OFF")
+        conn.execute("PRAGMA ignore_check_constraints = ON")
+        conn.execute(
+            "INSERT INTO messages VALUES (?, ?, ?, ?, ?)",
+            ("orphan-message", "missing-session", 0, "user", "orphan"),
+        )
+        conn.execute(
+            "INSERT INTO issue_events VALUES (?, ?, ?, ?, ?, ?, ?)",
+            ("orphan-event", "missing-message", "primary_care", "gp", "other", "resolved", "v1"),
+        )
+        conn.execute("UPDATE messages SET content = '   ' WHERE turn_index = 0")
+        conn.execute("UPDATE sessions SET started_at_utc = 'not-a-date' WHERE session_id = 'demo_session_000000'")
+        conn.execute("UPDATE sessions SET region = 'New South Wales' WHERE session_id = 'demo_session_000001'")
+        conn.execute("UPDATE sessions SET location_basis = '' WHERE session_id = 'demo_session_000002'")
+        conn.execute("UPDATE generation_runs SET session_count = session_count - 1")
+        conn.execute(
+            "UPDATE messages SET content = 'Contact me at person@example.com' "
+            "WHERE message_id = 'demo_session_000003_message_00'"
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    report = validate_store(path)
+
+    assert not report.ok
+    assert {
+        "foreign_key_violation",
+        "blank_content",
+        "invalid_timestamp",
+        "invalid_region",
+        "missing_location_basis",
+        "scenario_count_mismatch",
+        "generation_count_mismatch",
+        "personal_data_pattern",
+    } <= {error.code for error in report.errors}
+    assert report.counts["scenarios"]
+
+
+def test_validator_cli_returns_nonzero_for_invalid_store(tmp_path, capsys):
+    from medibridge.analytics_demo.validate import main
+
+    path = tmp_path / "empty.sqlite"
+    sqlite3.connect(path).close()
+
+    assert main([str(path)]) == 1
+    assert '"ok": false' in capsys.readouterr().out.lower()
