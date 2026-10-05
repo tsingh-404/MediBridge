@@ -70,9 +70,9 @@ Use one shared filter: inclusive `start_date` and `end_date` in Australia/Brisba
 
 ### Task 4: Contract and operational handoff
 
-- [ ] Document endpoint schemas, exact metric formulas, date/time convention, tag taxonomy, suppression flags, sample requests, artificial-scenario labels and error responses.
-- [ ] Regenerate the Phase 1 full store, run the API locally, and make a request for each endpoint; record status and sample totals in the handoff.
-- [ ] Run the repository backend test suite in the activated venv; check no student route or app files changed; commit.
+- [x] Document endpoint schemas, exact metric formulas, date/time convention, tag taxonomy, suppression flags, sample requests, artificial-scenario labels and error responses.
+- [x] Regenerate the Phase 1 full store, run the API locally, and make a request for each endpoint; record status and sample totals in the handoff.
+- [x] Run the repository backend test suite in the activated venv; check no student route or app files changed; commit.
 
 ## Acceptance and handoff
 

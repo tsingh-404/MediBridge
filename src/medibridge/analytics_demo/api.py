@@ -14,6 +14,8 @@ from medibridge.analytics_demo.metrics import (
     AggregateCell,
     AnalyticsFilter,
     MetricResult,
+    STORE_END,
+    STORE_START,
     _cohort_where,
     _event_where,
     _where_sql,
@@ -61,7 +63,7 @@ def _database_connection(path: Path) -> sqlite3.Connection:
     """Open only a read-only SQLite URI; every connection is query-only too."""
     resolved = path.resolve()
     uri = f"file:{quote(resolved.as_posix(), safe='/:')}?mode=ro"
-    connection = sqlite3.connect(uri, uri=True, timeout=5)
+    connection = sqlite3.connect(uri, uri=True, timeout=5, check_same_thread=False)
     connection.row_factory = sqlite3.Row
     connection.execute("PRAGMA query_only = ON")
     return connection
@@ -499,6 +501,12 @@ def _meta_values(conn: sqlite3.Connection) -> dict[str, Any]:
     start, end = conn.execute(
         "SELECT MIN(date(started_at_utc, '+10 hours')), MAX(date(started_at_utc, '+10 hours')) FROM sessions"
     ).fetchone()
+    if start is not None:
+        start = max(date.fromisoformat(start), STORE_START).isoformat()
+    if end is not None:
+        end = min(date.fromisoformat(end), STORE_END).isoformat()
+    if start is not None and end is not None and start > end:
+        start = end = None
     insurer_values = [row[0] for row in conn.execute("SELECT DISTINCT insurer_id FROM sessions ORDER BY insurer_id")]
     tier_values = [row[0] for row in conn.execute("SELECT DISTINCT tier_id FROM sessions ORDER BY tier_id")]
     return {

@@ -1,6 +1,7 @@
 """FastAPI contract tests for the standalone synthetic analytics demo."""
 
 from datetime import datetime, timedelta, timezone
+from concurrent.futures import ThreadPoolExecutor
 import importlib
 import sqlite3
 
@@ -166,6 +167,23 @@ def test_invalid_dates_values_and_dimensions_return_422(analytics_client, params
     response = analytics_client.get("/api/demo/overview", params=params)
 
     assert response.status_code == 422
+
+
+def test_meta_date_range_does_not_advertise_dates_rejected_by_filters(analytics_client):
+    conn = sqlite3.connect(analytics_client.app.state.db_path)
+    try:
+        conn.execute(
+            "UPDATE sessions SET started_at_utc = ? WHERE session_id = ?",
+            ("2026-09-30T15:30:00Z", "session-test-17"),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    response = analytics_client.get("/api/demo/meta")
+
+    assert response.status_code == 200
+    assert response.json()["available_date_range"]["end_date"] == "2026-09-30"
 
 
 def test_empty_selection_has_stable_zero_shape(analytics_client):
@@ -345,5 +363,20 @@ def test_api_database_connections_are_read_only(analytics_client):
     try:
         with pytest.raises(sqlite3.OperationalError, match="readonly"):
             conn.execute("UPDATE sessions SET region = 'unknown'")
+    finally:
+        conn.close()
+
+
+def test_api_database_connection_can_run_and_close_on_fastapi_worker_thread(analytics_client):
+    api = _api_module()
+    conn = api._database_connection(analytics_client.app.state.db_path)
+    try:
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            count = executor.submit(
+                lambda: conn.execute("SELECT COUNT(*) FROM sessions").fetchone()[0]
+            ).result()
+            executor.submit(conn.close).result()
+
+        assert count == 18
     finally:
         conn.close()
