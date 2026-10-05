@@ -306,3 +306,40 @@ def test_validator_cli_returns_nonzero_for_invalid_store(tmp_path, capsys):
 
     assert main([str(path)]) == 1
     assert '"ok": false' in capsys.readouterr().out.lower()
+
+
+def test_validator_returns_report_for_non_sqlite_file(tmp_path):
+    from medibridge.analytics_demo.validate import validate_store
+
+    path = tmp_path / "not-a-database.sqlite"
+    path.write_text("plain text, not a SQLite database", encoding="utf-8")
+
+    report = validate_store(path)
+
+    assert not report.ok
+    assert report.errors
+    assert report.errors[0].code == "invalid_database"
+    assert report.counts["rows"] == {}
+
+
+def test_validator_compares_scenario_assignments_to_seeded_ground_truth(tmp_path):
+    from medibridge.analytics_demo.generate import generate_store
+    from medibridge.analytics_demo.validate import validate_store
+
+    path = tmp_path / "wrong-scenario.sqlite"
+    generate_store(path, seed=22, session_count=100)
+    conn = sqlite3.connect(path)
+    try:
+        conn.execute("PRAGMA ignore_check_constraints = ON")
+        conn.execute(
+            "UPDATE sessions SET scenario_code = 'mixed_topic_turn' "
+            "WHERE session_id = 'demo_session_000000'"
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    report = validate_store(path)
+
+    assert not report.ok
+    assert "scenario_truth_mismatch" in {error.code for error in report.errors}

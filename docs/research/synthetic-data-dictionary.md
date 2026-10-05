@@ -47,7 +47,7 @@ The generated SQLite file is ignored by git and is not a source artifact. Regene
 | | `created_at_utc` | Time the local generation completed, UTC. This varies across runs. |
 | | `actor_count`, `session_count`, `message_count`, `issue_event_count` | Generator-recorded row totals, checked by the validator against table counts. |
 
-SQLite foreign keys link sessions to actors, messages to sessions, and events to messages. Message turn indexes are unique within a session. The validator independently checks table/column presence, SQLite integrity and foreign keys, timestamps, code sets, geography, nonblank content, personal-data patterns, scenario windows, and generation row totals. Its CLI emits a JSON report and exits non-zero on any validation error.
+SQLite foreign keys link sessions to actors, messages to sessions, and events to messages. Message turn indexes are unique within a session. The validator independently checks table/column presence, SQLite integrity and foreign keys, timestamps, code sets, geography, nonblank content, personal-data patterns, scenario windows, and generation row totals. It also replays `scenario_for` using the recorded seed and sequence encoded in each generated session ID, so valid but incorrectly assigned scenario codes are detected. Its CLI emits a JSON report and exits non-zero on any validation error; unreadable or malformed SQLite files return a report with an error rather than raising a database exception.
 
 ## Code sets
 

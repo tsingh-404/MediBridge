@@ -20,6 +20,7 @@ from .scenarios import (
     REGIONS,
     SERVICE_CODES,
     TOPIC_CODES,
+    scenario_for,
 )
 
 
@@ -127,7 +128,12 @@ def validate_store(path: Path) -> ValidationReport:
         errors.append(ValidationError("open_failed", str(exc)))
         return ValidationReport(str(path), False, tuple(errors), counts, metrics)
 
-    available = _schema_errors(conn, errors)
+    try:
+        available = _schema_errors(conn, errors)
+    except sqlite3.Error as exc:
+        conn.close()
+        errors.append(ValidationError("invalid_database", f"Could not inspect SQLite schema: {exc}"))
+        return ValidationReport(str(path), False, tuple(errors), counts, metrics)
     try:
         integrity = conn.execute("PRAGMA integrity_check").fetchone()
         if integrity and integrity[0] != "ok":
@@ -177,8 +183,6 @@ def validate_store(path: Path) -> ValidationReport:
                    "invalid_scenario", "Scenario code is not allowlisted", "sessions", "session_id")
         scenario_rows = conn.execute("SELECT scenario_code, COUNT(*) FROM sessions GROUP BY scenario_code ORDER BY scenario_code").fetchall()
         counts["scenarios"] = dict(scenario_rows)
-        if sum(counts["scenarios"].values()) != counts["rows"]["sessions"]:
-            errors.append(ValidationError("scenario_count_mismatch", "Scenario counts do not sum to the session row total.", "sessions"))
         for session_id, scenario_code, started_at in conn.execute("SELECT session_id, scenario_code, started_at_utc FROM sessions"):
             if scenario_code not in SCENARIO_WINDOWS or _timestamp_error(started_at):
                 continue
@@ -210,10 +214,12 @@ def validate_store(path: Path) -> ValidationReport:
                 errors.append(ValidationError("classification_version_mismatch", f"Unexpected classification version {version!r}.", "issue_events", str(event_id)))
 
         run = conn.execute(
-            "SELECT actor_count, session_count, message_count, issue_event_count FROM generation_runs ORDER BY run_id DESC LIMIT 1"
+            "SELECT seed, actor_count, session_count, message_count, issue_event_count "
+            "FROM generation_runs ORDER BY run_id DESC LIMIT 1"
         ).fetchone()
         if run:
-            run_counts = dict(zip(("actors", "sessions", "messages", "issue_events"), run))
+            seed = run[0]
+            run_counts = dict(zip(("actors", "sessions", "messages", "issue_events"), run[1:]))
             metrics["generation_run_counts"] = run_counts
             actual_counts = {key: counts["rows"][key] for key in run_counts}
             for table, recorded in run_counts.items():
@@ -223,6 +229,21 @@ def validate_store(path: Path) -> ValidationReport:
                         code,
                         f"Latest generation run records {recorded} {table} rows; found {actual_counts[table]}.",
                         "generation_runs",
+                    ))
+            session_sequence = re.compile(r"^demo_session_(\d+)$")
+            for session_id, started_at, scenario_code in conn.execute(
+                "SELECT session_id, started_at_utc, scenario_code FROM sessions"
+            ):
+                match = session_sequence.fullmatch(str(session_id))
+                if not match or _timestamp_error(started_at):
+                    continue
+                expected = scenario_for(int(seed), int(match.group(1)), started_at).scenario_code
+                if scenario_code != expected:
+                    errors.append(ValidationError(
+                        "scenario_truth_mismatch",
+                        f"Stored scenario {scenario_code!r} does not match seeded scenario {expected!r}.",
+                        "sessions",
+                        str(session_id),
                     ))
 
         metrics["timestamp_bounds"] = conn.execute(
@@ -268,7 +289,7 @@ def validate_store(path: Path) -> ValidationReport:
                 "expected_start": start.isoformat(), "expected_end": end.isoformat(),
             }
     except sqlite3.Error as exc:
-        errors.append(ValidationError("validation_query_failed", str(exc)))
+        errors.append(ValidationError("validation_query_failed", f"SQLite validation query failed: {exc}"))
     finally:
         conn.close()
 
