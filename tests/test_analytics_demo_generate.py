@@ -197,3 +197,55 @@ def test_generator_rejects_session_count_below_default_scale_floor(tmp_path):
 
     with pytest.raises(ValueError, match="at least 33000 sessions"):
         generate_store(tmp_path / "too-small.sqlite", session_count=32_999)
+
+
+def test_generator_refuses_the_configured_operational_database_unchanged(tmp_path, monkeypatch):
+    from medibridge.analytics_demo import generate
+
+    protected_db = tmp_path / "medibridge.db"
+    protected_bytes = b"operational database must remain untouched"
+    protected_db.write_bytes(protected_bytes)
+    monkeypatch.setattr(generate, "DB_PATH", protected_db)
+    aliased_path = tmp_path / "unused" / ".." / "medibridge.db"
+
+    with pytest.raises(ValueError, match="operational database"):
+        generate.generate_store(aliased_path, session_count=120)
+
+    assert protected_db.read_bytes() == protected_bytes
+
+
+def test_generation_failure_preserves_previous_output(tmp_path, monkeypatch):
+    from medibridge.analytics_demo import generate
+
+    output = tmp_path / "existing-demo.sqlite"
+    previous_bytes = b"previous successful output"
+    output.write_bytes(previous_bytes)
+
+    def fail_scenario(*args, **kwargs):
+        raise RuntimeError("forced scenario failure")
+
+    monkeypatch.setattr(generate, "scenario_for", fail_scenario)
+    with pytest.raises(RuntimeError, match="forced scenario failure"):
+        generate.generate_store(output, session_count=120)
+
+    assert output.read_bytes() == previous_bytes
+    assert list(tmp_path.glob(f".{output.name}.*.tmp")) == []
+
+
+def test_successful_generation_replaces_a_prior_demo_store(tmp_path):
+    from medibridge.analytics_demo.generate import generate_store
+
+    output = tmp_path / "replace-demo.sqlite"
+    generate_store(output, seed=1, session_count=120)
+    summary = generate_store(output, seed=2, session_count=120)
+
+    conn = connect_demo(output)
+    try:
+        stored_seed = conn.execute("SELECT seed FROM generation_runs").fetchone()[0]
+        stored_sessions = conn.execute("SELECT COUNT(*) FROM sessions").fetchone()[0]
+    finally:
+        conn.close()
+
+    assert summary.seed == stored_seed == 2
+    assert stored_sessions == 120
+    assert list(tmp_path.glob(f".{output.name}.*.tmp")) == []

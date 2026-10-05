@@ -6,11 +6,14 @@ import argparse
 from dataclasses import asdict, dataclass
 from datetime import date, datetime, timedelta, timezone
 import json
+import os
 from pathlib import Path
 import random
 import sqlite3
 import sys
+import tempfile
 
+from medibridge.config import DB_PATH
 from .scenarios import scenario_for
 from .schema import connect_demo, create_schema
 
@@ -23,6 +26,42 @@ DATE_END = date(2026, 9, 30)
 DEFAULT_MIN_ACTORS = 30_000
 MIN_FULL_SCALE_SESSIONS = 33_000
 WRITE_BATCH_SIZE = 1_000
+
+
+def _guard_output_path(output_path: Path) -> None:
+    """Reject direct paths, aliases, or hard links to the operational DB."""
+    operational_path = Path(DB_PATH)
+    resolved_output = output_path.resolve()
+    resolved_operational = operational_path.resolve()
+    same_resolved_path = os.path.normcase(str(resolved_output)) == os.path.normcase(
+        str(resolved_operational)
+    )
+    same_file = False
+    if output_path.exists() and operational_path.exists():
+        try:
+            same_file = os.path.samefile(output_path, operational_path)
+        except OSError:
+            # Resolution above still protects the usual symlink/path aliases.
+            pass
+    if same_resolved_path or same_file:
+        raise ValueError(
+            f"Refusing to write analytics demo output to the configured operational database: "
+            f"{operational_path}"
+        )
+
+
+def _remove_staging_files(staging_path: Path) -> None:
+    """Remove only the temporary database and its SQLite sidecars."""
+    for candidate in (
+        staging_path,
+        Path(f"{staging_path}-journal"),
+        Path(f"{staging_path}-wal"),
+        Path(f"{staging_path}-shm"),
+    ):
+        try:
+            candidate.unlink()
+        except FileNotFoundError:
+            pass
 
 
 @dataclass(frozen=True)
@@ -73,13 +112,9 @@ def generate_store(
             f"session_count must be at least {MIN_FULL_SCALE_SESSIONS} sessions to satisfy the "
             "30,000-actor target and 10% multiple-session requirement"
         )
-    if session_count < 30_000 and session_count < 2:
-        raise ValueError("session_count must be at least 2")
-
     output_path = Path(path)
+    _guard_output_path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    if output_path.exists():
-        output_path.unlink()
 
     actor_count = _actor_count_for_sessions(session_count)
     if session_count - actor_count < max(1, (actor_count + 9) // 10):
@@ -88,7 +123,12 @@ def generate_store(
             "30,000-actor target and 10% multiple-session requirement"
         )
 
-    conn = connect_demo(output_path)
+    staging_fd, staging_name = tempfile.mkstemp(
+        prefix=f".{output_path.name}.", suffix=".tmp", dir=output_path.parent
+    )
+    os.close(staging_fd)
+    staging_path = Path(staging_name)
+    conn = None
     message_count = 0
     issue_event_count = 0
     rng = random.Random(seed)
@@ -98,6 +138,7 @@ def generate_store(
     extra_sessions = session_count - actor_count
     repeated_actor_count = max(1, (actor_count + 9) // 10)
     try:
+        conn = connect_demo(staging_path)
         create_schema(conn)
         conn.execute("BEGIN")
         actor_rows = []
@@ -211,14 +252,19 @@ def generate_store(
             ),
         )
         conn.commit()
+        conn.close()
+        conn = None
+        os.replace(staging_path, output_path)
     except Exception:
-        conn.rollback()
-        conn.close()
-        if output_path.exists():
-            output_path.unlink()
+        try:
+            if conn is not None:
+                try:
+                    conn.rollback()
+                finally:
+                    conn.close()
+        finally:
+            _remove_staging_files(staging_path)
         raise
-    else:
-        conn.close()
 
     return GenerationSummary(
         seed=seed,
