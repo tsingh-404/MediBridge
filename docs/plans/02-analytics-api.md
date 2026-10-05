@@ -64,9 +64,9 @@ Use one shared filter: inclusive `start_date` and `end_date` in Australia/Brisba
 
 **Interfaces:** standalone `app` in `api.py`; CLI `python -m medibridge.analytics_demo --db data/analytics_demo.sqlite --port 8001`.
 
-- [ ] Write FastAPI test-client tests for each endpoint; assert `synthetic: true` and caveats are present, filters are echoed, date inversions and unknown dimensions return 422, and forbidden row fields never appear anywhere in JSON.
-- [ ] Implement endpoints using the metric core and disclosure control. Return stable response shapes for no data and all-suppressed selections.
-- [ ] Run `python -m pytest tests/test_analytics_demo_metrics.py tests/test_analytics_demo_api.py -q`; commit.
+- [x] Write FastAPI test-client tests for each endpoint; assert `synthetic: true` and caveats are present, filters are echoed, date inversions and unknown dimensions return 422, and forbidden row fields never appear anywhere in JSON.
+- [x] Implement endpoints using the metric core and disclosure control. Return stable response shapes for no data and all-suppressed selections.
+- [x] Run `python -m pytest tests/test_analytics_demo_metrics.py tests/test_analytics_demo_api.py -q`; commit.
 
 ### Task 4: Contract and operational handoff
 

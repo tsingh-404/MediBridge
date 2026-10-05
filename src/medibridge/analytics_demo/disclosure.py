@@ -1,6 +1,7 @@
 """Prototype disclosure control for synthetic aggregate tables."""
 
 from dataclasses import dataclass
+from datetime import date
 import re
 from typing import Mapping
 
@@ -52,6 +53,7 @@ _ALLOWED_DIMENSIONS = frozenset(
         "service_code",
         "concern_code",
         "month",
+        "week",
     }
 )
 _VALUE_ALLOWLISTS = {
@@ -113,6 +115,13 @@ def suppress_table(rows: list[AggregateCell], min_sessions: int = 10) -> Suppres
                 raise ValueError(f"{name} is not an allowed value")
             if name == "month" and not re.fullmatch(r"\d{4}-(0[1-9]|1[0-2])", value):
                 raise ValueError("month must use YYYY-MM granularity")
+            if name == "week":
+                try:
+                    week_start = date.fromisoformat(value)
+                except ValueError as exc:
+                    raise ValueError("week must use a Monday YYYY-MM-DD start") from exc
+                if week_start.weekday() != 0:
+                    raise ValueError("week must use a Monday YYYY-MM-DD start")
         support = cell.distinct_sessions
         if isinstance(support, bool) or not isinstance(support, int) or support < 0:
             raise ValueError("each cell must have a non-negative distinct_sessions count")
