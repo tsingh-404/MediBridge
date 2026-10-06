@@ -53,10 +53,10 @@ def test_sentinel_normalized(tmp_path: Path) -> None:
     assert items[0].item_end_date is None
 
 
-@pytest.mark.skipif(not Path("Documents/MBS-XML-20260301-version 2.XML").exists(),
+@pytest.mark.skipif(not Path("knowledge/data/MBS-current.XML").exists(),
                     reason="Real XML not present")
 def test_real_item_23() -> None:
-    items = {it.item_num: it for it in parse_mbs_xml(Path("Documents/MBS-XML-20260301-version 2.XML"))}
+    items = {it.item_num: it for it in parse_mbs_xml(Path("knowledge/data/MBS-current.XML"))}
     assert "23" in items
     assert items["23"].schedule_fee is not None
     assert items["23"].schedule_fee > 0

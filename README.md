@@ -76,8 +76,8 @@ This private repository includes the source files currently used for ingestion u
 
 | Path | Purpose |
 |------|---------|
-| `knowledge/data/MBS-XML-20260301-version 2.XML` | MBS XML export |
-| `knowledge/data/20260301_MBSONLINE_IMAP.TXT` | IMAP TSV (Windows-1252) |
+| `knowledge/data/MBS-current.XML` | MBS XML export |
+| `knowledge/data/MBSONLINE_IMAP-current.TXT` | IMAP TSV (Windows-1252) |
 | `knowledge/documents/deed-for-the-provision-of-overseas-student-health-cover-1-july-2025.pdf` | OSHC deed |
 | `knowledge/documents/MBS Book - March 2026.pdf` | MBS book |
 | `knowledge/documents/MBS Item Information.pdf` | Item information PDF |

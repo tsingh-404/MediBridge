@@ -1,0 +1,63 @@
+name: data-refresh
+
+on:
+  schedule:
+    # Run every Monday at 03:15 UTC.
+    - cron: '15 3 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: mbs-data-refresh
+  cancel-in-progress: false
+
+jobs:
+  refresh-mbs:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: python -m pip install -e ".[dev]"
+
+      - name: Refresh current MBS sources
+        run: python -m medibridge.data.refresh.mbs
+
+      - name: Check for source changes
+        id: sources
+        run: |
+          if git diff --quiet -- \
+            knowledge/data/MBS-current.XML \
+            knowledge/data/MBSONLINE_IMAP-current.TXT; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "MBS sources are already current."
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            echo "New MBS source data detected."
+          fi
+
+      - name: Run backend tests
+        run: python -m pytest tests/ -v
+
+      - name: Commit refreshed data
+        if: steps.sources.outputs.changed == 'true'
+        run: |
+          git add \
+            knowledge/data/MBS-current.XML \
+            knowledge/data/MBSONLINE_IMAP-current.TXT
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git commit -m "Refresh MBS data sources"
+          git push origin HEAD:main

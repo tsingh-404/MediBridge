@@ -97,9 +97,9 @@ MediBridge/
 ├── tests/
 │   └── test_coverage_calculator.py  # Golden-case tests
 │
-├── Documents/                  # Source documents (not committed)
-│   ├── MBS-XML-20260301-version 2.XML
-│   ├── 20260301_MBSONLINE_IMAP.TXT
+├── knowledge/                  # Tracked source data and documents
+│   ├── data/MBS-current.XML
+│   ├── data/MBSONLINE_IMAP-current.TXT
 │   ├── deed-for-the-provision-of-overseas-student-health-cover-*.pdf
 │   ├── MBS Book - March 2026.pdf
 │   └── MBS Item Information.pdf
