@@ -39,7 +39,7 @@ METRIC_UNITS = {
 METRIC_CAVEATS = {
     "sessions": "Fictional synthetic demonstration sessions only; not a population estimate.",
     "question_turns": "A turn is a distinct fictional user message with one or more issue tags.",
-    "topic_sessions": "Question tags are not diagnoses; one session may count in multiple topic categories.",
+    "topic_sessions": "Question tags are not diagnoses and categories can overlap. The denominator is selected cohort sessions; value remains the raw topic session count.",
     "topic_rate_per_1000": "Synthetic question frequency only; not prevalence, incidence, demand, or unmet need.",
     "unknown_topic_share": "Unknown includes sessions with no classified topic, including sessions with no issue tags. This metric uses session-level filters only.",
 }
@@ -327,6 +327,9 @@ def read_metrics(
         ).fetchone()
         cells = (_cell({}, rows[0], distinct_sessions=rows[1]),)
     elif metric == "topic_sessions":
+        selected_sessions = conn.execute(
+            f"SELECT COUNT(DISTINCT s.session_id) FROM sessions s{cohort_where}", cohort_values
+        ).fetchone()[0]
         clauses = cohort_clauses + event_clauses
         rows = conn.execute(
             f"""SELECT e.topic_code, COUNT(DISTINCT s.session_id)
@@ -335,7 +338,10 @@ def read_metrics(
                 GROUP BY e.topic_code ORDER BY e.topic_code""",
             cohort_values + event_values,
         ).fetchall()
-        cells = tuple(_cell({"topic_code": row[0]}, row[1]) for row in rows)
+        cells = tuple(
+            AggregateCell({"topic_code": row[0]}, row[1], selected_sessions, row[1], row[1])
+            for row in rows
+        )
     elif metric == "topic_rate_per_1000":
         denominator = conn.execute(
             f"SELECT COUNT(DISTINCT s.session_id) FROM sessions s{cohort_where}", cohort_values

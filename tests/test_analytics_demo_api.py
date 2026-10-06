@@ -231,6 +231,7 @@ def test_all_suppressed_topic_table_has_nulls_and_explicit_flags(analytics_clien
     assert payload["cells"]
     assert all(cell["suppressed"] for cell in payload["cells"])
     assert all(cell["value"] is None for cell in payload["cells"])
+    assert all(cell["denominator"] is None for cell in payload["cells"])
     assert all(cell["reason_code"] for cell in payload["cells"])
     assert payload["no_data"] is False
     assert payload["data_state"] == "suppressed"
@@ -421,6 +422,41 @@ def test_matrix_accepts_each_other_allowlisted_pair(analytics_client, pair):
         "row": pair.split(":")[0],
         "column": pair.split(":")[1],
     }
+
+
+def test_topic_session_table_shows_cohort_denominator_without_normalizing_count(analytics_client):
+    conn = sqlite3.connect(analytics_client.app.state.db_path)
+    conn.executemany(
+        "INSERT INTO issue_events VALUES (?, ?, ?, ?, ?, ?, ?)",
+        [
+            (f"event-test-extra-{index:02d}", f"message-test-{index:02d}",
+             "coverage_waiting_period", "gp", "waiting_period", "resolved", "demo-topic-taxonomy-v1")
+            for index in (0, 1, 3, 4, 5, 6, 7, 9)
+        ],
+    )
+    conn.commit()
+    conn.close()
+
+    payload = analytics_client.get(
+        "/api/demo/overview", params={"topic_code": "coverage_waiting_period"}
+    ).json()
+    selected_sessions = payload["tables"]["selected_sessions"]["cells"][0]
+    topic_cell = payload["tables"]["topic_sessions"]["cells"][0]
+
+    assert selected_sessions["numerator"] == 18
+    assert topic_cell["suppressed"] is False
+    assert topic_cell["numerator"] == 11
+    assert topic_cell["value"] == 11
+    assert topic_cell["denominator"] == selected_sessions["numerator"]
+    assert "denominator is selected cohort sessions" in payload["tables"]["topic_sessions"]["caveat"]
+
+    for path in ("/api/demo/topics", "/api/demo/coverage-friction"):
+        shared_payload = analytics_client.get(
+            path, params={"topic_code": "coverage_waiting_period"}
+        ).json()
+        shared_cell = shared_payload["tables"]["topic_sessions"]["cells"][0]
+        assert shared_cell["numerator"] == shared_cell["value"] == 11
+        assert shared_cell["denominator"] == 18
 
 
 @pytest.mark.parametrize("pair", [None, "topic_code", "topic_code:topic_code", "session_id:region",
