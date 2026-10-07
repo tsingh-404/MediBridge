@@ -29,6 +29,7 @@ from medibridge.analytics_demo.metrics import (
 from medibridge.analytics_demo.scenarios import (
     CONCERN_CODES,
     INSURER_CODES,
+    INSURERS,
     LOCATION_BASES,
     REGIONS,
     SERVICE_CODES,
@@ -254,7 +255,7 @@ def _rate_cells(
 ) -> list[AggregateCell]:
     """Return per-1,000 counts with grouped cohort denominators."""
     session_dims = tuple(name for name in group_by if name in {"region", "location_basis"})
-    event_dims = tuple(name for name in group_by if name in {"topic_code", "concern_code"})
+    event_dims = tuple(name for name in group_by if name in {"topic_code", "service_code", "concern_code"})
     clauses, values = _cohort_where(filters)
     if exclude_unknown_geography:
         clauses += ["s.region != 'unknown'", "s.location_basis != 'unknown'"]
@@ -292,7 +293,7 @@ def _rate_cells(
     denominator_dims = period_dims + session_dims
     category_values = []
     for name in event_dims:
-        allowed = TOPIC_CODES if name == "topic_code" else CONCERN_CODES
+        allowed = TOPIC_CODES if name == "topic_code" else SERVICE_CODES if name == "service_code" else CONCERN_CODES
         selected = getattr(filters, name)
         category_values.append((selected,) if selected is not None else tuple(sorted(allowed)))
 
@@ -529,17 +530,81 @@ def _trend_tables(conn: sqlite3.Connection, filters: AnalyticsFilter, bucket: st
     return tables
 
 
+def _monthly_baseline_table(
+    name: str,
+    unit: str,
+    current_cells: list[AggregateCell],
+    baselines_by_month: Mapping[str, AggregateCell],
+    available_baseline_months: Mapping[str, int],
+    caveat: str,
+) -> dict[str, Any]:
+    """Serialize one monthly metric with same-month-prior-year comparators."""
+    protected: list[AggregateCell] = []
+    current_indexes: list[int] = []
+    baseline_indexes: list[int | None] = []
+    for current in current_cells:
+        current_indexes.append(len(protected))
+        protected.append(current)
+        month = str(current.dimensions["month"])
+        baseline_month = f"{int(month[:4]) - 1:04d}{month[4:]}"
+        baseline = baselines_by_month.get(baseline_month) if baseline_month in available_baseline_months else None
+        if baseline is None:
+            baseline_indexes.append(None)
+            continue
+        baseline_indexes.append(len(protected))
+        protected.append(AggregateCell(
+            dict(current.dimensions), baseline.numerator, baseline.denominator,
+            baseline.value, baseline.distinct_sessions,
+        ))
+
+    safe = suppress_table(protected)
+    serialized: list[dict[str, Any]] = []
+    for current_index, baseline_index in zip(current_indexes, baseline_indexes):
+        current_safe = safe.cells[current_index]
+        baseline_safe = safe.cells[baseline_index] if baseline_index is not None else None
+        baseline_available = bool(
+            baseline_safe is not None and not current_safe.suppressed and not baseline_safe.suppressed
+        )
+        baseline_value = baseline_safe.value if baseline_available else None
+        difference = current_safe.value - baseline_value if baseline_available else None
+        output = _cell_json(current_safe)
+        output.update({
+            "baseline_available": baseline_available,
+            "baseline_numerator": baseline_safe.numerator if baseline_available else None,
+            "baseline_denominator": baseline_safe.denominator if baseline_available else None,
+            "baseline_value": baseline_value,
+            "baseline_distinct_sessions": baseline_safe.distinct_sessions if baseline_available else None,
+            "difference": difference,
+        })
+        serialized.append(output)
+
+    table = _table(name, unit, current_cells, caveat)
+    table["cells"] = serialized
+    table["suppressed"] = any(cell["suppressed"] for cell in serialized)
+    if len(serialized) == 1:
+        only = serialized[0]
+        if only["suppressed"]:
+            table.update({"numerator": None, "denominator": None, "value": None, "no_data": False})
+        else:
+            table.update({
+                "numerator": only["numerator"],
+                "denominator": only["denominator"],
+                "value": only["value"],
+            })
+    elif len(serialized) > 1:
+        table.update({"numerator": None, "denominator": None, "value": None})
+    if serialized and all(cell["suppressed"] for cell in serialized):
+        table.update({"numerator": None, "denominator": None, "value": None, "data_state": "suppressed", "no_data": False})
+    elif not serialized:
+        table["data_state"] = "no_data"
+    elif table["suppressed"]:
+        table["no_data"] = False
+        table["data_state"] = "available"
+    return table
+
+
 def _timeline_tables(conn: sqlite3.Connection, filters: AnalyticsFilter) -> dict[str, dict[str, Any]]:
     session_filters = replace(filters, topic_code=None, service_code=None, concern_code=None)
-    session_months = _grouped_cells(conn, session_filters, ("month",))
-    session_table = _table(
-        "selected_sessions_by_month",
-        "sessions",
-        session_months,
-        "Monthly selected synthetic sessions include unknown geography and unknown-topic sessions.",
-    )
-    session_table["filters_applied"] = _filters_applied(session_filters)
-    tables = {"selected_sessions_by_month": session_table}
 
     cohort_clauses, cohort_values = _cohort_where(session_filters)
     cohort_where = _where_sql(cohort_clauses)
@@ -564,6 +629,101 @@ def _timeline_tables(conn: sqlite3.Connection, filters: AnalyticsFilter) -> dict
             baseline_values,
         )
     }
+    selected_month_cells = [
+        AggregateCell({"month": month}, count, None, count, count)
+        for month, count in selected_months.items()
+    ]
+    baseline_session_cells = {
+        month: AggregateCell({"month": month}, count, None, count, count)
+        for month, count in baseline_months.items()
+    }
+    session_table = _monthly_baseline_table(
+        "selected_sessions_by_month", "sessions", selected_month_cells,
+        baseline_session_cells, baseline_months,
+        "Monthly selected synthetic sessions include unknown geography and unknown-topic sessions.",
+    )
+    session_table["filters_applied"] = _filters_applied(session_filters)
+    tables = {"selected_sessions_by_month": session_table}
+
+    def monthly_question_turns(period_filters: AnalyticsFilter) -> dict[str, tuple[int, int]]:
+        period_cohort_clauses, period_cohort_values = _cohort_where(period_filters)
+        period_event_clauses, period_event_values = _event_where(period_filters)
+        where = _where_sql(["m.role = 'user'"] + period_cohort_clauses + period_event_clauses)
+        rows = conn.execute(
+            f"""SELECT strftime('%Y-%m', s.started_at_utc, '+10 hours'),
+                       COUNT(DISTINCT m.message_id), COUNT(DISTINCT s.session_id)
+                FROM sessions s JOIN messages m ON m.session_id = s.session_id
+                JOIN issue_events e ON e.message_id = m.message_id{where}
+                GROUP BY 1 ORDER BY 1""",
+            period_cohort_values + period_event_values,
+        ).fetchall()
+        return {row[0]: (row[1], row[2]) for row in rows}
+
+    current_turns = monthly_question_turns(filters)
+    baseline_turns = monthly_question_turns(replace(filters, start_date=None, end_date=None))
+    question_turn_cells = [
+        AggregateCell(
+            {"month": month}, current_turns.get(month, (0, 0))[0], None,
+            current_turns.get(month, (0, 0))[0], current_turns.get(month, (0, 0))[1],
+        )
+        for month in selected_months
+    ]
+    baseline_turn_cells = {
+        month: AggregateCell(
+            {"month": month}, baseline_turns.get(month, (0, 0))[0], None,
+            baseline_turns.get(month, (0, 0))[0], baseline_turns.get(month, (0, 0))[1],
+        )
+        for month in baseline_months
+    }
+    turns_table = _monthly_baseline_table(
+        "question_turns_by_month", "question_turns", question_turn_cells,
+        baseline_turn_cells, baseline_months,
+        "Distinct user messages with one or more matched issue tags per month; supporting sessions are shown separately.",
+    )
+    turns_table["filters_applied"] = _filters_applied(filters)
+    tables["question_turns_by_month"] = turns_table
+
+    def monthly_unknown_topics(period_filters: AnalyticsFilter) -> dict[str, int]:
+        period_clauses, period_values = _cohort_where(period_filters)
+        where = _where_sql(period_clauses)
+        rows = conn.execute(
+            f"""SELECT strftime('%Y-%m', s.started_at_utc, '+10 hours'),
+                       COUNT(DISTINCT CASE WHEN NOT EXISTS (
+                           SELECT 1 FROM messages m JOIN issue_events e ON e.message_id = m.message_id
+                           WHERE m.session_id = s.session_id AND e.topic_code != 'unknown_unclassified'
+                       ) THEN s.session_id END)
+                FROM sessions s{where}
+                GROUP BY 1 ORDER BY 1""",
+            period_values,
+        ).fetchall()
+        return {row[0]: row[1] for row in rows}
+
+    current_unknown = monthly_unknown_topics(session_filters)
+    baseline_unknown = monthly_unknown_topics(baseline_filters)
+    unknown_cells = [
+        AggregateCell(
+            {"month": month}, current_unknown.get(month, 0), denominator,
+            current_unknown.get(month, 0) / denominator if denominator else 0.0,
+            current_unknown.get(month, 0),
+        )
+        for month, denominator in selected_months.items()
+    ]
+    baseline_unknown_cells = {
+        month: AggregateCell(
+            {"month": month}, count, baseline_months[month],
+            count / baseline_months[month] if baseline_months[month] else 0.0, count,
+        )
+        for month, count in baseline_unknown.items()
+        if month in baseline_months
+    }
+    unknown_table = _monthly_baseline_table(
+        "unknown_topic_share_by_month", "share", unknown_cells,
+        baseline_unknown_cells, baseline_months,
+        "Unknown includes sessions with no classified topic, including sessions with no issue tags; denominator is all selected sessions.",
+    )
+    unknown_table["filters_applied"] = _filters_applied(session_filters)
+    tables["unknown_topic_share_by_month"] = unknown_table
+
     event_clauses, event_values = _event_where(filters)
     topic_codes = (filters.topic_code,) if filters.topic_code else tuple(sorted(TOPIC_CODES))
     current_event_clauses = cohort_clauses + event_clauses
@@ -686,8 +846,8 @@ def _meta_values(conn: sqlite3.Connection) -> dict[str, Any]:
         end = min(date.fromisoformat(end), STORE_END).isoformat()
     if start is not None and end is not None and start > end:
         start = end = None
-    insurer_values = [row[0] for row in conn.execute("SELECT DISTINCT insurer_id FROM sessions ORDER BY insurer_id")]
-    tier_values = [row[0] for row in conn.execute("SELECT DISTINCT tier_id FROM sessions ORDER BY tier_id")]
+    insurer_values = sorted(INSURER_CODES)
+    tier_values = sorted(TIER_CODES)
     return {
         "available_date_range": {"start_date": start, "end_date": end},
         "allowlists": {
@@ -700,6 +860,14 @@ def _meta_values(conn: sqlite3.Connection) -> dict[str, Any]:
             "concern_code": sorted(CONCERN_CODES),
             "time_bucket": ["month", "week"],
         },
+        "insurers": [
+            {
+                "id": insurer["id"],
+                "name": insurer["name"],
+                "tiers": list(insurer["tiers"]),
+            }
+            for insurer in INSURERS
+        ],
         "suppression": {
             "min_sessions": 10,
             "scope": "table-local",
@@ -822,6 +990,7 @@ def create_app(db_path: str | Path = DEFAULT_DB) -> FastAPI:
         filters = _filters(request, conn)
         session_cells = _grouped_cells(conn, filters, ("region", "location_basis"))
         rates = _rate_cells(conn, filters, ("region", "location_basis", "topic_code"), exclude_unknown_geography=True)
+        service_rates = _rate_cells(conn, filters, ("region", "location_basis", "service_code"), exclude_unknown_geography=True)
         session_table = _table("sessions", "sessions", session_cells,
                                "Unknown geography remains visible; stated regions and search areas are separate.")
         session_table["filters_applied"] = _filters_applied(
@@ -831,6 +1000,8 @@ def create_app(db_path: str | Path = DEFAULT_DB) -> FastAPI:
             "sessions_by_region_and_basis": session_table,
             "topic_rates": _table("topic_rate_per_1000", "topic_sessions_per_1000_region_sessions", rates,
                                   "Unknown geography is excluded from region-specific rates; searched area is not residence."),
+            "service_rates": _table("service_rate_per_1000", "service_sessions_per_1000_region_sessions", service_rates,
+                                    "Unknown geography is excluded from region-specific rates; searched area is not residence."),
         }
         return _response("regions", filters, _provenance(conn, filters), tables,
                          "sessions_by_region_and_basis",

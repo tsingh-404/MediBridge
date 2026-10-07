@@ -1,7 +1,16 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { formatCell, sortCells, tableState } from '../../analytics_ui/components/data.js';
+import { formatCell, labelCode, sortCells, tableState } from '../../analytics_ui/components/data.js';
+
+test('shortlisted insurer and tier identifiers use their codebase display names', () => {
+  assert.equal(labelCode('allianz'), 'Allianz Care Australia');
+  assert.equal(labelCode('cbhs'), 'CBHS International Health');
+  assert.equal(labelCode('medibank'), 'Medibank Private');
+  assert.equal(labelCode('allianz_essentials'), 'Allianz Care Australia · Essentials');
+  assert.equal(labelCode('cbhs_standard'), 'CBHS International Health · Standard');
+  assert.equal(labelCode('medibank_comprehensive'), 'Medibank Private · Comprehensive');
+});
 
 test('formatCell renders suppressed nulls as a label rather than zero', () => {
   assert.equal(formatCell({ value: null, suppressed: true }, 'sessions'), 'Insufficient group size');

@@ -7,8 +7,8 @@ import { parseFilters, resetFilters, serializeFilters } from '../../analytics_ui
 const meta = {
   available_date_range: { start_date: '2024-10-01', end_date: '2026-09-30' },
   allowlists: {
-    insurer_id: ['demo_insurer_a'],
-    tier_id: ['demo_standard'],
+    insurer_id: ['allianz'],
+    tier_id: ['allianz_standard'],
     region: ['Brisbane', 'unknown'],
     location_basis: ['stated_demo_region', 'service_search_area', 'unknown'],
     topic_code: ['care_navigation', 'unknown_unclassified'],
@@ -51,13 +51,13 @@ test('parseFilters keeps exact allowlisted unknown tokens and ignores invalid UR
 
 test('parseFilters rejects duplicate dimensions and dates outside metadata bounds', () => {
   const parsed = parseFilters(new URLSearchParams(
-    'region=unknown&region=Brisbane&start_date=2024-09-30&end_date=2025-01-01&insurer_id=demo_insurer_a'
+    'region=unknown&region=Brisbane&start_date=2024-09-30&end_date=2025-01-01&insurer_id=allianz'
   ), meta);
 
   assert.equal(parsed.region, '');
   assert.equal(parsed.start_date, '2024-10-01');
   assert.equal(parsed.end_date, '2026-09-30');
-  assert.equal(parsed.insurer_id, 'demo_insurer_a');
+  assert.equal(parsed.insurer_id, 'allianz');
 });
 
 test('serializeFilters emits only non-empty allowlisted filters', () => {
@@ -69,6 +69,12 @@ test('serializeFilters emits only non-empty allowlisted filters', () => {
   });
 
   assert.equal(query.toString(), 'region=unknown&topic_code=unknown_unclassified');
+});
+
+test('allowlisted filters survive a URL serialize and parse round-trip', () => {
+  const source = { ...resetFilters(meta), region: 'unknown', topic_code: 'care_navigation', start_date: '2025-02-01', end_date: '2025-04-30' };
+  const restored = parseFilters(serializeFilters(source), meta);
+  assert.deepEqual(restored, source);
 });
 
 test('fetchAggregate requests only an aggregate endpoint and propagates the shared filters', async () => {

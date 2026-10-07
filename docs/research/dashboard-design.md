@@ -18,7 +18,7 @@ A separate root node (`9c4af167-4e4c-4084-8153-e375453645d2`) appeared in the pr
 ## Shared dashboard structure
 
 - A separate analytics presentation shell, not the student SPA and not part of Capacitor assets. Keep any service/dashboard deployment loopback-only at `127.0.0.1`; do not create a public entry point.
-- Persistent header: MediBridge Analytics, audience emphasis switch (Insurer / Public health), local presentation context and the exact disclosure **Synthetic demo — not real student data**. The disclosure must be visible without scrolling on every view and export.
+- Persistent header: MediBridge Analytics, audience emphasis switch (Insurer / Public health), local presentation context and the exact disclosure **Synthetic demo: not real student data**. The disclosure must be visible without scrolling on every view and export.
 - One shared filter bar drives every view: `start_date`, `end_date`, `insurer_id`, `tier_id`, `region`, `location_basis`, `topic_code`, `service_code`, `concern_code`. Values come from `/api/demo/meta` allowlists; keep `unknown` selectable. Include applied-filter context and clear-all. The plan calls for URL-serialized filter state so navigation and shared views stay consistent.
 - Unknown choices are exact allowlist tokens, not a generic option sent for every dimension: for example `topic_code=unknown_unclassified`, `region=unknown`, and `location_basis=unknown`. Insurer, tier, service, and concern selectors use only their respective `/meta` allowlist tokens; do not invent an `unknown` value if that dimension does not advertise one.
 - Filters use inclusive Brisbane calendar dates, bounded by the meta date range. Date, insurer, tier, region and location basis define the selected-session cohort. Topic, service and concern filters select issue-event series/numerators and must not silently shrink a topic-rate session denominator. Honor each response/table `filters_applied` value.
@@ -60,7 +60,7 @@ The generated drafts target a desktop viewport. Their prompts include the same n
 
 ## Visual and number system
 
-- Typography from existing MediBridge tokens: Cabinet Grotesk for display headings, General Sans for body and controls, JetBrains Mono for numeric metadata. The canvas draft currently references external font delivery; implementation should use the repository’s self-hosted font assets/build conventions and must not add a runtime CDN dependency.
+- Typography from existing MediBridge tokens: Cabinet Grotesk for display headings and General Sans for body, controls and values. Use proportional figures generally; tabular numerals are limited to table columns and chart-axis ticks. The canvas draft currently references external font delivery; implementation should use the repository’s self-hosted font assets/build conventions and must not add a runtime CDN dependency.
 - Warm off-white background (`#F5F6F0`), white surfaces, dark green-black ink (`#131714`), muted green-gray text, blue accent (`#0074a0`), restrained amber highlight, and neutral borders. Use color redundantly with text, shape or pattern. No medical stock imagery or chart gradients.
 - Counts use locale thousands separators and whole values. Percentages and rates use at most one decimal place. Label rates as “sessions per 1,000 selected sessions”; show numerator and denominator alongside the rate. For event outcome shares, denominator is eligible resolved-or-unresolved events; show unknown outcome events separately. Use Brisbane month labels for monthly buckets.
 - No statistical confidence intervals for synthetic scenarios. Do not infer financial values from questions.
@@ -87,3 +87,38 @@ The generated drafts target a desktop viewport. Their prompts include the same n
 Option B anchors the implementation. The selected direction keeps the synthetic disclosure and caveats visible while giving a presenter a clear question-to-evidence narrative. The narrow-width treatment is an implementation sketch because the available design drafts are desktop-only; it will be checked at narrow width during Task 5. No participant review has occurred, so the proposed narrative and measures remain unvalidated with stakeholders.
 
 Implementation must preserve the API's single-value-per-dimension query contract: selectors are single-select even though the earlier plan says multi-select. Unknown selections are available only when that exact dimension's `/meta` allowlist advertises a token. Trend rates are per selected period/region/location_basis group and exclude unknown region/basis; the baseline is available only for monthly buckets. Never expose raw transcript/message text, user/session identifiers, row-level data, or individual paths in the page, tooltip, drilldown, or export.
+
+## Visual System v2 — UI foundation
+
+The reusable foundation uses semantic CSS roles so light and dark surfaces keep the same meaning. Cabinet Grotesk is reserved for display headings; General Sans is used for interface text and values. Numeric values use proportional figures, with tabular numerals only in table cells/headings and chart-axis ticks. Panels use 12px radii, controls use 8px radii, borders are one-pixel hairlines, and chart marks use thin strokes. Reduced-motion preferences remain honored by disabling transitions and smooth scrolling.
+
+| Role | Light | Dark | Use |
+|---|---|---|---|
+| Page | `#F5F6F0` | `#111915` | Main canvas |
+| Surface | `#FFFFFF` | `#19231D` | Panels and controls |
+| Raised/subtle surface | `#FFFFFF` / `#EDF0EC` | `#202C25` / `#28352D` | Emphasis and chart tracks |
+| Ink / muted | `#131714` / `#54615A` | `#EDF2EE` / `#B8C4BC` | Text hierarchy |
+| Accent | `#0074A0` | `#65BAD4` | Selection and primary chart series |
+| Positive | `#245C44` | `#8FCCA7` | Secondary series and positive state |
+| Highlight | `#F3C76A` | `#F3C76A` | Scenario and caution emphasis |
+| Border / focus | `#D9DFD8` / `#005F84` | `#3B4A40` / `#9CDFF0` | Separation and keyboard focus |
+
+The stylesheet supports OS preference through `prefers-color-scheme` and explicit `data-theme="light"` / `data-theme="dark"` overrides. Suppressed values share a hatched SVG treatment and the visible label **Insufficient group size**; the cell carries no substitute numeric value. The synthetic disclosure string is **Synthetic demo: not real student data**.
+
+### Palette validation evidence
+
+No `validate_palette.js` file is present in the repository (`rg --files -g validate_palette.js` returned no paths). I checked foreground/background pairs with the WCAG relative-luminance contrast ratio formula; the values below are the exact outputs of the Node contrast calculation on the CSS hex tokens. All listed text pairs exceed the 4.5:1 WCAG AA normal-text target:
+
+| Scheme and pair | Contrast |
+|---|---:|
+| Light ink `#131714` on page `#F5F6F0` | 16.65:1 |
+| Light muted `#54615A` on page `#F5F6F0` | 5.97:1 |
+| Light accent `#0074A0` on surface `#FFFFFF` | 5.24:1 |
+| Light accent strong `#005D7F` on surface `#FFFFFF` | 7.31:1 |
+| White disclosure text on `#142B22` | 15.02:1 |
+| Dark ink `#EDF2EE` on page `#111915` | 15.79:1 |
+| Dark muted `#B8C4BC` on surface `#19231D` | 8.97:1 |
+| Dark accent `#65BAD4` on surface `#19231D` | 7.33:1 |
+| Dark focus `#9CDFF0` on page `#111915` | 12.12:1 |
+
+This is a documented palette contrast check, not a full interface accessibility audit. Participant review and in-browser checks remain in the later validation task.

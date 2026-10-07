@@ -1,26 +1,60 @@
 import React from 'react';
-import { AggregateTable } from '../components/AggregateTable.jsx';
-import { MonthlyTrend, RankedBars } from '../components/AggregateChart.jsx';
-import { MetricCard } from '../components/MetricCard.jsx';
-import { StateMessage } from '../components/StateMessage.jsx';
-import { cellDimensions, labelCode, sortCells } from '../components/data.js';
+import { StatTile } from '../components/charts/StatTile.jsx';
+import { RankedBar } from '../components/charts/RankedBar.jsx';
+import { TrendChart } from '../components/charts/TrendChart.jsx';
+import { Heatmap } from '../components/charts/Heatmap.jsx';
+import { findingTitle } from '../components/charts/insights.js';
+import { cohortScope, leadingTopicRate, selectTopicTrend, topicCodesFromRates } from '../components/charts/overviewData.js';
+import { cellDimensions, formatCell, labelCode, tableCells, trendBaseline } from '../components/data.js';
 
-export function Overview({ data, trend, filters, onSelect }) {
+function insightFor(topicCode, trendTable) {
+  const latest = tableCells(trendTable).filter((cell) => !cell.suppressed && cell.value != null)
+    .sort((a, b) => String(cellDimensions(b).month || '').localeCompare(String(cellDimensions(a).month || '')))[0];
+  const baseline = trendBaseline(latest);
+  const direction = baseline.available && baseline.difference != null
+    ? baseline.difference > 0 ? 'increase' : baseline.difference < 0 ? 'decrease' : 'steady'
+    : 'steady';
+  const confidence = !latest ? 'Low synthetic confidence' : latest.denominator >= 100 ? 'Higher synthetic support' : latest.denominator >= 30 ? 'Moderate synthetic support' : 'Lower synthetic support';
+  return { title: findingTitle(topicCode, direction), latest, baseline, confidence };
+}
+
+export function Overview({ data, ratesData, timeline, filters = {}, onSelect }) {
   const overview = data?.tables || {};
-  const leadingTopic = sortCells(overview.topic_sessions?.cells || [], 'value', 'desc').find((cell) => !cell.suppressed);
-  const leadingTopicCode = cellDimensions(leadingTopic || {}).topic_code;
-  const leadingTopicTable = leadingTopic ? { unit: overview.topic_sessions?.unit, cells: [leadingTopic] } : undefined;
-  return <div className="view-stack">
-    <div className="question-rail"><p className="eyebrow">Question to review</p><h2>Which topics appear in this synthetic session cohort?</h2><p>Use category counts and rates to frame a discussion. They describe tagged questions and do not establish prevalence, unmet need, or outcomes.</p></div>
-    <section aria-label="Selected cohort metrics" className="metric-grid">
-      <MetricCard title="Selected sessions" table={overview.selected_sessions} description="Cohort size after date, insurer, tier, region and location-basis filters." />
-      <MetricCard title="Tagged question turns" table={overview.question_turns} description="Distinct user messages with a matched issue tag; sessions are supporting context." />
-      <MetricCard title={leadingTopicCode ? `Sessions tagged ${labelCode(leadingTopicCode)}` : 'Highest-ranked topic sessions'} table={leadingTopicTable} description="Distinct sessions in one topic category; categories may overlap and this is not all selected sessions." />
-      <MetricCard title="Unknown topic share" table={overview.unknown_topic_share} description="Includes sessions without a classified topic, using all selected sessions as denominator." />
+  const topicRates = ratesData?.tables?.topic_rates;
+  const leadingRate = leadingTopicRate(overview.topic_sessions, topicRates);
+  const leadingCode = cellDimensions(leadingRate || {}).topic_code || cellDimensions(tableCells(overview.topic_sessions)[0] || {}).topic_code;
+  const trendCode = filters.topic_code || leadingCode;
+  const trendTable = selectTopicTrend(timeline, trendCode);
+  const scope = cohortScope(filters);
+  const monthlySessions = timeline?.tables?.selected_sessions_by_month;
+  const heatmapTopics = topicCodesFromRates(topicRates);
+  const insight = insightFor(trendCode || 'selected_topic', trendTable);
+  const latestValue = insight.latest ? formatCell(insight.latest, trendTable?.unit) : 'No unsuppressed monthly value';
+  return <div className="view-stack overview-view">
+    <section className="overview-finding" aria-labelledby="overview-finding-title">
+      <p className="eyebrow">Synthetic overview finding</p>
+      <h2 id="overview-finding-title">{insight.title}</h2>
+      <p>Leading topic in the selected synthetic session cohort: <strong>{leadingCode ? labelCode(leadingCode) : 'No unsuppressed topic'}</strong>. Topic categories can overlap and each rate uses selected sessions as its denominator.</p>
+      <span className="synthetic-confidence" aria-label={insight.confidence}>{insight.confidence}</span>
     </section>
-    <RankedBars title="Ranked topic sessions" table={overview.topic_sessions} filterField="topic_code" onSelect={onSelect} />
-    <MonthlyTrend table={trend?.tables?.topic_code_trend} filters={filters} scenarioVersions={trend?.provenance?.scenario_versions || []} />
-    <AggregateTable title="Topic session aggregates" table={overview.topic_sessions} columns={['topic_code']} onSelect={onSelect} />
-    <StateMessage table={overview.topic_sessions} title="Topic results" />
+    <section aria-label="Selected cohort metrics" className="stat-tile-grid">
+      <StatTile title="Selected sessions" table={overview.selected_sessions} monthlyTable={monthlySessions} filters={filters} description="Distinct sessions after the selected filters; includes unknown-topic sessions." />
+      <StatTile title="Question turns" table={overview.question_turns} monthlyTable={timeline?.tables?.question_turns_by_month} filters={filters} description="Distinct tagged user messages; sessions are supporting context." />
+      <StatTile title={leadingCode ? `${labelCode(leadingCode)} rate` : 'Leading topic rate'} table={leadingRate ? { unit: topicRates?.unit, cells: [leadingRate] } : topicRates} monthlyTable={trendCode === leadingCode ? trendTable : undefined} filters={filters} description="Leading topic rate from the API topic_rates table, per 1,000 selected sessions." />
+      <StatTile title="Unknown topic share" table={overview.unknown_topic_share} monthlyTable={timeline?.tables?.unknown_topic_share_by_month} filters={filters} description="Sessions without a classified topic; denominator is all selected sessions." />
+    </section>
+    <Heatmap timeline={timeline} topicCodes={heatmapTopics} onSelect={onSelect} selectedTopic={filters.topic_code} filters={filters} scenarioVersions={timeline?.provenance?.scenario_versions || []} />
+    <div className="overview-analysis-grid">
+      <RankedBar title="Topic sessions, ranked" table={overview.topic_sessions} filterField="topic_code" onSelect={onSelect} selected={filters.topic_code} />
+      <aside className="insight-panel" aria-labelledby="insight-panel-title">
+        <p className="eyebrow">Discussion guide</p><h3 id="insight-panel-title">What this pattern can support</h3>
+        <dl><dt>So what</dt><dd>{labelCode(trendCode || 'selected_topic')} appears in {latestValue} for the latest visible month.</dd>
+          <dt>Why</dt><dd>These are distinct synthetic session tags. Categories may overlap, and the trend uses a per-month selected-session denominator.</dd>
+          <dt>Now what</dt><dd>Review the question examples and independent evidence before making a service or policy decision.</dd></dl>
+        <span className="synthetic-confidence">{insight.confidence}</span>
+      </aside>
+    </div>
+    <TrendChart table={trendTable} topicCode={trendCode || 'selected_topic'} filters={filters} title={`${scope} trend · ${labelCode(trendCode || 'leading topic')}`} scenarioVersions={timeline?.provenance?.scenario_versions || []} />
+    <p className="scenario-caveat">Synthetic scenario caveat: highlighted windows are artificial demonstration patterns only. They are not real-world events or evidence of diagnoses, outbreaks, prevalence, or market share.</p>
   </div>;
 }

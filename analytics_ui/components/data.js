@@ -88,6 +88,24 @@ export function trendTickIndices(count, maxTicks) {
 
 export function labelCode(value = '') {
   if (value === 'unknown_unclassified' || value === 'unknown_not_assessed' || value === 'unknown') return 'Unknown';
+  const insurerNames = {
+    allianz: 'Allianz Care Australia',
+    cbhs: 'CBHS International Health',
+    medibank: 'Medibank Private',
+  };
+  if (insurerNames[value]) return insurerNames[value];
+  const tierNames = {
+    allianz_essentials: ['allianz', 'Essentials'],
+    allianz_standard: ['allianz', 'Standard'],
+    cbhs_essentials: ['cbhs', 'Essentials'],
+    cbhs_standard: ['cbhs', 'Standard'],
+    medibank_essentials: ['medibank', 'Essentials'],
+    medibank_comprehensive: ['medibank', 'Comprehensive'],
+  };
+  if (tierNames[value]) {
+    const [insurerCode, tierName] = tierNames[value];
+    return `${insurerNames[insurerCode]} · ${tierName}`;
+  }
   return value
     .split('_')
     .map((word) => word ? word[0].toUpperCase() + word.slice(1) : word)

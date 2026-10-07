@@ -77,5 +77,7 @@ def create_schema(conn: sqlite3.Connection) -> None:
             ON sessions(region);
         CREATE INDEX IF NOT EXISTS idx_issue_events_topic
             ON issue_events(topic_code);
+        CREATE INDEX IF NOT EXISTS idx_issue_events_message_id
+            ON issue_events(message_id);
         """
     )

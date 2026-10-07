@@ -1,13 +1,11 @@
 import React, { useEffect, useState } from 'react';
-import { AggregateTable } from './AggregateTable.jsx';
+import { ChartFrame } from './charts/ChartFrame.jsx';
 import { cellDimensions, formatCell, formatRateDifference, labelCode, tableCells, trendBaseline, trendCategories, trendCellSeries, trendLineSegments, trendTickIndices } from './data.js';
 
 export function RankedBars({ title, table, filterField, onSelect, limit = 8 }) {
   const cells = tableCells(table).slice(0, limit);
   const max = Math.max(1, ...cells.filter((cell) => !cell.suppressed).map((cell) => Number(cell.value) || 0));
-  return <section className="chart-panel" aria-labelledby={`chart-${filterField || 'ranked'}`}>
-    <h3 id={`chart-${filterField || 'ranked'}`}>{title}</h3>
-    <p className="muted">Horizontal bars compare category values. Categories may overlap and do not add to 100%.</p>
+  return <ChartFrame title={title} table={table} columns={filterField ? [filterField] : []} onSelect={onSelect} subtitle="Horizontal bars compare aggregate categories. Categories may overlap and do not add to 100%.">
     <ol className="bar-list" aria-label={`${title}, text alternative`}>
       {cells.map((cell, index) => {
         const dimensions = cellDimensions(cell);
@@ -24,7 +22,7 @@ export function RankedBars({ title, table, filterField, onSelect, limit = 8 }) {
       {cells.length === 0 && <li>No category results for these filters.</li>}
     </ol>
     <p className="chart-description">Text summary: {cells.length} returned aggregate categories. Suppressed categories remain labelled and are not rendered as zero.</p>
-  </section>;
+  </ChartFrame>;
 }
 
 export function MonthlyTrend({ table, title = 'Monthly question rate', filters, filterField = 'topic_code', scenarioVersions = [] }) {
@@ -39,17 +37,16 @@ export function MonthlyTrend({ table, title = 'Monthly question rate', filters, 
   const cells = trendCellSeries(table, filterField);
   if (!filters?.[filterField]) {
     const dimensionLabel = filterField === 'concern_code' ? 'concern' : 'topic';
-    return <section className="chart-panel"><h3>{title}</h3><p role="status">Select one allowlisted {dimensionLabel} to inspect its monthly series. Unselected multi-category trend tables can be fully hidden by the API’s table-local complementary suppression.</p></section>;
+    return <ChartFrame title={title} table={table}><p role="status">Select one allowlisted {dimensionLabel} to inspect its monthly series. Unselected multi-category trend tables can be fully hidden by the API’s table-local complementary suppression.</p></ChartFrame>;
   }
   if (!filters?.region || filters.region === 'unknown' || !filters?.location_basis || filters.location_basis === 'unknown') {
-    return <section className="chart-panel"><h3>{title}</h3><p role="status">Select one broad region and a known location basis to view segmented trend rates. Unknown region or location-basis rates are excluded by the API contract.</p></section>;
+    return <ChartFrame title={title} table={table}><p role="status">Select one broad region and a known location basis to view segmented trend rates. Unknown region or location-basis rates are excluded by the API contract.</p></ChartFrame>;
   }
   const series = cells;
   const months = [...new Set(series.map((cell) => cell.dimensions?.month || cell.dimensions?.period))].filter(Boolean).sort();
   const axisTicks = new Set(trendTickIndices(months.length, axisMaxTicks));
   const categories = trendCategories(series, filterField).slice(0, 4);
   const categoryLabel = filterField === 'concern_code' ? 'selected concern' : 'selected topic';
-  const titleId = `monthly-trend-${filterField}-title`;
   const hasRespiratoryScenario = scenarioVersions.includes('respiratory_spike')
     && filters.topic_code === 'respiratory_information';
   const hasCoverageScenario = scenarioVersions.includes('coverage_information_spike')
@@ -78,9 +75,11 @@ export function MonthlyTrend({ table, title = 'Monthly question rate', filters, 
   const currentLines = linePoints('current');
   const baselineLines = linePoints('baseline');
   const hasBaseline = chartData.some((point) => point.baseline !== null);
-  return <section className="chart-panel" aria-labelledby={titleId}>
-    <h3 id={titleId}>{title}</h3>
-    <p className="muted">Sessions per 1,000 sessions in each month, region and location-basis group. This is a synthetic question trend, not prevalence or an alert.</p>
+  return <ChartFrame title={title} table={table} columns={['month', 'region', 'location_basis', filterField]} subtitle="Sessions per 1,000 sessions in each month, region and location-basis group. This is a synthetic question trend, not an alert." extraColumns={[
+    { label: 'Prior-year numerator / denominator', render: (cell) => { const baseline = trendBaseline(cell); return baseline.available ? `${baseline.numerator ?? 'Hidden'} / ${baseline.denominator ?? 'Hidden'}` : 'Unavailable'; } },
+    { label: 'Prior-year rate / 1,000', render: (cell) => { const baseline = trendBaseline(cell); return baseline.available && baseline.rate != null ? formatCell({ value: baseline.rate }, table?.unit) : 'Unavailable'; } },
+    { label: 'Rate difference per 1,000', render: (cell) => { const baseline = trendBaseline(cell); return baseline.available ? formatRateDifference(baseline.difference) : 'Unavailable'; } },
+  ]}>
     {months.length === 0 ? <p>No monthly trend values are available for this selection.</p> : <>
       <div className="trend-chart" role="img" aria-label={`${months.length} monthly points for ${categories.map(labelCode).join(', ') || categoryLabel}; current and available prior-year rates are shown as distinct lines per 1,000 sessions within each period, region, and location basis.`}>
         <svg className="trend-line-chart" viewBox="0 0 760 220" preserveAspectRatio="xMidYMid meet" aria-hidden="true" focusable="false">
@@ -111,7 +110,7 @@ export function MonthlyTrend({ table, title = 'Monthly question rate', filters, 
           const hidden = point.current === null;
           const baseline = point.baselineData;
           return <li key={point.month}>
-            <strong>{point.month} ? {labelCode(categories[0] || categoryLabel)}</strong>
+            <strong>{point.month} · {labelCode(categories[0] || categoryLabel)}</strong>
             <span>Current: {hidden ? 'Insufficient group size' : `${formatCell(point.cell, table?.unit)}; ${point.cell.numerator} / ${point.cell.denominator} sessions`}</span>
             <span>{baseline.available && baseline.rate != null
               ? `Prior year: ${formatCell({ value: baseline.rate }, table?.unit)}; ${baseline.numerator} / ${baseline.denominator} sessions; rate difference ${formatRateDifference(baseline.difference)}`
@@ -121,10 +120,5 @@ export function MonthlyTrend({ table, title = 'Monthly question rate', filters, 
         })}
       </ul>
     </>}
-    <details className="trend-table-details"><summary>Open monthly values in an accessible table</summary><AggregateTable title="Monthly trend values" table={table} columns={['month', 'region', 'location_basis', filterField]} extraColumns={[
-      { label: 'Prior-year numerator / denominator', render: (cell) => { const baseline = trendBaseline(cell); return baseline.available ? `${baseline.numerator ?? 'Hidden'} / ${baseline.denominator ?? 'Hidden'}` : 'Unavailable'; } },
-      { label: 'Prior-year rate / 1,000', render: (cell) => { const baseline = trendBaseline(cell); return baseline.available && baseline.rate != null ? formatCell({ value: baseline.rate }, table?.unit) : 'Unavailable'; } },
-      { label: 'Rate difference per 1,000', render: (cell) => { const baseline = trendBaseline(cell); return baseline.available ? formatRateDifference(baseline.difference) : 'Unavailable'; } },
-    ]} /></details>
-  </section>;
+  </ChartFrame>;
 }
