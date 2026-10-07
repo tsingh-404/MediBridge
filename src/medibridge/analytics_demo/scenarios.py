@@ -10,6 +10,9 @@ from datetime import date
 import random
 
 
+INSURER_CODES = ("demo_insurer_a", "demo_insurer_b", "demo_insurer_c")
+TIER_CODES = ("demo_basic", "demo_standard", "demo_plus")
+
 TOPIC_CODES = frozenset(
     {
         "coverage_benefit_exclusion",
@@ -267,8 +270,8 @@ def scenario_for(seed: int, sequence_no: int, started_at_utc: str) -> Scenario:
         started_at_utc=started_at_utc,
         messages=messages,
         issue_tags=issue_tags,
-        insurer_id=rng.choice(("demo_insurer_a", "demo_insurer_b", "demo_insurer_c")),
-        tier_id=rng.choice(("demo_basic", "demo_standard", "demo_plus")),
+        insurer_id=rng.choice(INSURER_CODES),
+        tier_id=rng.choice(TIER_CODES),
         region=region,
         location_basis=location_basis,
     )
