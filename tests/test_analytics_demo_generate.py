@@ -410,3 +410,65 @@ def test_validator_rejects_null_region_when_constraint_is_absent(tmp_path):
     report = validate_store(path)
 
     assert "invalid_region" in {error.code for error in report.errors}
+
+
+def test_generated_sessions_use_shortlisted_insurers_with_their_seeded_tiers(tmp_path):
+    from medibridge.analytics_demo.generate import generate_store
+
+    path = tmp_path / "shortlisted-insurers.sqlite"
+    generate_store(path, seed=17, session_count=200)
+    conn = sqlite3.connect(path)
+    try:
+        observed = set(conn.execute("SELECT DISTINCT insurer_id, tier_id FROM sessions"))
+    finally:
+        conn.close()
+
+    assert observed == {
+        ("allianz", "allianz_essentials"),
+        ("allianz", "allianz_standard"),
+        ("cbhs", "cbhs_essentials"),
+        ("cbhs", "cbhs_standard"),
+        ("medibank", "medibank_essentials"),
+        ("medibank", "medibank_comprehensive"),
+    }
+
+
+def test_shortlisted_insurer_labels_and_tiers_match_canonical_seed_data():
+    from medibridge.analytics_demo.scenarios import INSURERS as DEMO_INSURERS
+    from medibridge.data.ingest.insurers import INSURERS, TIERS
+
+    canonical_names = {insurer[0]: insurer[1] for insurer in INSURERS}
+    expected = tuple(
+        (
+            insurer_id,
+            canonical_names[insurer_id],
+            tuple(sorted(
+                (tier[0], tier[2]) for tier in TIERS if tier[1] == insurer_id
+            )),
+        )
+        for insurer_id in ("allianz", "cbhs", "medibank")
+    )
+    observed = tuple(
+        (insurer["id"], insurer["name"], tuple(sorted(
+            (tier["id"], tier["name"]) for tier in insurer["tiers"]
+        )))
+        for insurer in DEMO_INSURERS
+    )
+
+    assert observed == expected
+
+
+def test_generated_database_records_current_generator_provenance(tmp_path):
+    from medibridge.analytics_demo.generate import generate_store
+
+    path = tmp_path / "generator-provenance.sqlite"
+    generate_store(path, seed=19, session_count=100)
+    conn = sqlite3.connect(path)
+    try:
+        (generator_version,) = conn.execute(
+            "SELECT generator_version FROM generation_runs"
+        ).fetchone()
+    finally:
+        conn.close()
+
+    assert generator_version == "synthetic-generator-v2"

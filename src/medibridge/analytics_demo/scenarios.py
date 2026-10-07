@@ -9,9 +9,32 @@ from dataclasses import dataclass
 from datetime import date
 import random
 
+from medibridge.data.ingest.insurers import INSURERS as CANONICAL_INSURERS
+from medibridge.data.ingest.insurers import TIERS as CANONICAL_TIERS
 
-INSURER_CODES = ("demo_insurer_a", "demo_insurer_b", "demo_insurer_c")
-TIER_CODES = ("demo_basic", "demo_standard", "demo_plus")
+SHORTLISTED_INSURER_CODES = ("allianz", "cbhs", "medibank")
+_CANONICAL_INSURER_NAMES = {insurer[0]: insurer[1] for insurer in CANONICAL_INSURERS}
+INSURERS = tuple(
+    {
+        "id": insurer_id,
+        "name": _CANONICAL_INSURER_NAMES[insurer_id],
+        "tiers": tuple(
+            {"id": tier[0], "name": tier[2]}
+            for tier in sorted(
+                (tier for tier in CANONICAL_TIERS if tier[1] == insurer_id),
+                key=lambda tier: tier[2].casefold(),
+            )
+        ),
+    }
+    for insurer_id in SHORTLISTED_INSURER_CODES
+)
+INSURER_CODES = SHORTLISTED_INSURER_CODES
+TIER_CODES = tuple(tier["id"] for insurer in INSURERS for tier in insurer["tiers"])
+INSURER_TIER_PAIRS = tuple(
+    (insurer["id"], tier["id"])
+    for insurer in INSURERS
+    for tier in insurer["tiers"]
+)
 
 TOPIC_CODES = frozenset(
     {
@@ -265,13 +288,14 @@ def scenario_for(seed: int, sequence_no: int, started_at_utc: str) -> Scenario:
         )
         for index, issue in enumerate((first, second) if second else (first,))
     )
+    insurer_id, tier_id = rng.choice(INSURER_TIER_PAIRS)
     return Scenario(
         scenario_code=scenario_code,
         started_at_utc=started_at_utc,
         messages=messages,
         issue_tags=issue_tags,
-        insurer_id=rng.choice(INSURER_CODES),
-        tier_id=rng.choice(TIER_CODES),
+        insurer_id=insurer_id,
+        tier_id=tier_id,
         region=region,
         location_basis=location_basis,
     )

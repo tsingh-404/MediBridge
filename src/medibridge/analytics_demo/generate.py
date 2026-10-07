@@ -18,7 +18,7 @@ from .scenarios import scenario_for
 from .schema import connect_demo, create_schema
 
 
-GENERATOR_VERSION = "synthetic-generator-v1"
+GENERATOR_VERSION = "synthetic-generator-v2"
 TAXONOMY_VERSION = "issue-taxonomy-v1"
 CLASSIFICATION_VERSION = TAXONOMY_VERSION
 DATE_START = date(2024, 10, 1)

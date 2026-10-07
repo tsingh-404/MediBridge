@@ -34,6 +34,8 @@ ENDPOINTS = [
     "/api/demo/overview",
     "/api/demo/topics",
     "/api/demo/trend",
+    "/api/demo/timeline",
+    "/api/demo/matrix",
     "/api/demo/regions",
     "/api/demo/coverage-friction",
     "/api/demo/quality",
@@ -56,8 +58,14 @@ def analytics_client(tmp_path):
     start = datetime(2025, 1, 1, 14, tzinfo=timezone.utc)
     regions = ("Brisbane", "Gold Coast", "unknown")
     bases = ("stated_demo_region", "service_search_area", "unknown")
-    insurers = ("demo_insurer_a", "demo_insurer_b", "demo_insurer_c")
-    tiers = ("demo_basic", "demo_standard", "demo_plus")
+    insurer_tiers = (
+        ("allianz", "allianz_essentials"),
+        ("allianz", "allianz_standard"),
+        ("cbhs", "cbhs_essentials"),
+        ("cbhs", "cbhs_standard"),
+        ("medibank", "medibank_essentials"),
+        ("medibank", "medibank_comprehensive"),
+    )
     topics = (
         "primary_care",
         "primary_care",
@@ -74,8 +82,7 @@ def analytics_client(tmp_path):
             session_id,
             f"actor-test-{index:02d}",
             started,
-            insurers[index % len(insurers)],
-            tiers[index % len(tiers)],
+            *insurer_tiers[index % len(insurer_tiers)],
             regions[index % len(regions)],
             bases[index % len(bases)],
             "respiratory_spike" if index % 6 == 4 else "control_stable",
@@ -124,9 +131,12 @@ def _walk(value):
 
 @pytest.mark.parametrize("path", ENDPOINTS)
 def test_every_endpoint_returns_safe_synthetic_envelope(analytics_client, path):
+    params = {"start_date": "2025-01-01", "end_date": "2025-01-31", "region": "Brisbane"}
+    if path == "/api/demo/matrix":
+        params["pair"] = "topic_code:region"
     response = analytics_client.get(
         path,
-        params={"start_date": "2025-01-01", "end_date": "2025-01-31", "region": "Brisbane"},
+        params=params,
     )
 
     assert response.status_code == 200
@@ -186,6 +196,32 @@ def test_meta_date_range_does_not_advertise_dates_rejected_by_filters(analytics_
     assert response.json()["available_date_range"]["end_date"] == "2026-09-30"
 
 
+def test_meta_exposes_shortlisted_insurer_names_and_their_seeded_tiers(analytics_client):
+    response = analytics_client.get("/api/demo/meta")
+
+    assert response.status_code == 200
+    meta = response.json()
+    assert meta["allowlists"]["insurer_id"] == ["allianz", "cbhs", "medibank"]
+    assert meta["allowlists"]["tier_id"] == [
+        "allianz_essentials", "allianz_standard", "cbhs_essentials", "cbhs_standard",
+        "medibank_comprehensive", "medibank_essentials",
+    ]
+    assert meta["insurers"] == [
+        {"id": "allianz", "name": "Allianz Care Australia", "tiers": [
+            {"id": "allianz_essentials", "name": "Essentials"},
+            {"id": "allianz_standard", "name": "Standard"},
+        ]},
+        {"id": "cbhs", "name": "CBHS International Health", "tiers": [
+            {"id": "cbhs_essentials", "name": "Essentials"},
+            {"id": "cbhs_standard", "name": "Standard"},
+        ]},
+        {"id": "medibank", "name": "Medibank Private", "tiers": [
+            {"id": "medibank_essentials", "name": "Essentials"},
+            {"id": "medibank_comprehensive", "name": "Comprehensive"},
+        ]},
+    ]
+
+
 def test_empty_selection_has_stable_zero_shape(analytics_client):
     response = analytics_client.get("/api/demo/overview", params={"region": "Far North Queensland"})
 
@@ -226,6 +262,7 @@ def test_all_suppressed_topic_table_has_nulls_and_explicit_flags(analytics_clien
     assert payload["cells"]
     assert all(cell["suppressed"] for cell in payload["cells"])
     assert all(cell["value"] is None for cell in payload["cells"])
+    assert all(cell["denominator"] is None for cell in payload["cells"])
     assert all(cell["reason_code"] for cell in payload["cells"])
     assert payload["no_data"] is False
     assert payload["data_state"] == "suppressed"
@@ -362,6 +399,216 @@ def test_week_bucket_is_available_and_uses_week_start_dimension(analytics_client
     assert response.status_code == 200
     assert response.json()["time_bucket"] == "week"
     assert all("week" in cell["dimensions"] for cell in response.json()["cells"])
+
+
+def test_timeline_returns_month_tables_with_trend_baseline_fields(analytics_client):
+    response = analytics_client.get(
+        "/api/demo/timeline",
+        params={"region": "Brisbane", "location_basis": "stated_demo_region"},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["endpoint"] == "timeline"
+    assert payload["filters_applied"]["region"] == "Brisbane"
+    assert payload["filters_applied"]["location_basis"] == "stated_demo_region"
+    assert "selected_sessions_by_month" in payload["tables"]
+    session_cells = payload["tables"]["selected_sessions_by_month"]["cells"]
+    assert session_cells
+    assert all("month" in cell["dimensions"] for cell in session_cells)
+    topic_tables = [name for name in payload["tables"] if name.startswith("topic_month_rates.")]
+    assert topic_tables
+    for name in topic_tables:
+        assert all(cell["dimensions"]["topic_code"] == name.split(".", 1)[1]
+                   for cell in payload["tables"][name]["cells"])
+        for cell in payload["tables"][name]["cells"]:
+            assert "month" in cell["dimensions"]
+            assert {"baseline_available", "baseline_numerator", "baseline_denominator",
+                    "baseline_rate_per_1000", "rate_difference_per_1000"}.issubset(cell)
+
+
+def test_timeline_exposes_metric_matched_monthly_tiles_with_prior_year_deltas(analytics_client):
+    database = analytics_client.app.state.db_path
+    conn = sqlite3.connect(database)
+    for year, count, prefix in ((2024, 12, "baseline"), (2025, 15, "current")):
+        for index in range(count):
+            actor = f"{prefix}-actor-{index:02d}"
+            session = f"{prefix}-session-{index:02d}"
+            message = f"{prefix}-message-{index:02d}"
+            conn.execute("INSERT INTO actors VALUES (?, ?)", (actor, f"{year}-10-01T00:00:00Z"))
+            conn.execute("INSERT INTO sessions VALUES (?, ?, ?, ?, ?, ?, ?, ?)", (
+                session, actor, f"{year}-10-10T00:00:00Z", "allianz", "allianz_essentials",
+                "Brisbane", "stated_demo_region", "control_stable",
+            ))
+            conn.execute("INSERT INTO messages VALUES (?, ?, ?, ?, ?)", (
+                message, session, 0, "user", "synthetic tagged turn",
+            ))
+            conn.execute("INSERT INTO issue_events VALUES (?, ?, ?, ?, ?, ?, ?)", (
+                f"{prefix}-event-{index:02d}", message, "primary_care", "gp", "care_navigation",
+                "resolved", "test-taxonomy",
+            ))
+    for index in range(12):
+        actor = f"current-unknown-actor-{index:02d}"
+        session = f"current-unknown-session-{index:02d}"
+        conn.execute("INSERT INTO actors VALUES (?, ?)", (actor, "2025-10-01T00:00:00Z"))
+        conn.execute("INSERT INTO sessions VALUES (?, ?, ?, ?, ?, ?, ?, ?)", (
+            session, actor, "2025-10-10T00:00:00Z", "allianz", "allianz_essentials",
+            "Brisbane", "stated_demo_region", "control_stable",
+        ))
+    conn.commit()
+    conn.close()
+
+    response = analytics_client.get("/api/demo/timeline", params={
+        "start_date": "2025-10-01", "end_date": "2025-10-31",
+    })
+    assert response.status_code == 200
+    tables = response.json()["tables"]
+    selected = tables["selected_sessions_by_month"]["cells"][0]
+    turns = tables["question_turns_by_month"]["cells"][0]
+    unknown = tables["unknown_topic_share_by_month"]["cells"][0]
+    for cell in (selected, turns, unknown):
+        assert {"baseline_available", "baseline_numerator", "baseline_denominator",
+                "baseline_value", "baseline_distinct_sessions", "difference"}.issubset(cell)
+        assert cell["baseline_available"] is True
+    assert selected["numerator"] == 27
+    assert selected["baseline_numerator"] == 12
+    assert selected["difference"] == 15
+    assert turns["numerator"] == 15
+    assert turns["denominator"] is None
+    assert turns["distinct_sessions"] == 15
+    assert turns["baseline_numerator"] == 12
+    assert turns["baseline_denominator"] is None
+    assert turns["difference"] == 3
+    assert unknown["numerator"] == 12
+    assert unknown["denominator"] == 27
+    assert unknown["value"] == pytest.approx(12 / 27)
+    assert unknown["baseline_numerator"] == 0
+    assert unknown["baseline_denominator"] == 12
+    assert unknown["difference"] == pytest.approx(12 / 27)
+
+
+def test_timeline_monthly_metric_suppression_hides_values_when_baseline_support_is_small(analytics_client):
+    database = analytics_client.app.state.db_path
+    conn = sqlite3.connect(database)
+    for year, count, prefix in ((2024, 5, "small-baseline"), (2025, 12, "large-current")):
+        for index in range(count):
+            actor = f"{prefix}-actor-{index:02d}"
+            session = f"{prefix}-session-{index:02d}"
+            message = f"{prefix}-message-{index:02d}"
+            conn.execute("INSERT INTO actors VALUES (?, ?)", (actor, f"{year}-11-01T00:00:00Z"))
+            conn.execute("INSERT INTO sessions VALUES (?, ?, ?, ?, ?, ?, ?, ?)", (
+                session, actor, f"{year}-11-10T00:00:00Z", "allianz", "allianz_essentials",
+                "Brisbane", "stated_demo_region", "control_stable",
+            ))
+            conn.execute("INSERT INTO messages VALUES (?, ?, ?, ?, ?)", (
+                message, session, 0, "user", "synthetic tagged turn",
+            ))
+            conn.execute("INSERT INTO issue_events VALUES (?, ?, ?, ?, ?, ?, ?)", (
+                f"{prefix}-event-{index:02d}", message, "primary_care", "gp", "care_navigation",
+                "resolved", "test-taxonomy",
+            ))
+    conn.commit()
+    conn.close()
+
+    response = analytics_client.get("/api/demo/timeline", params={
+        "start_date": "2025-11-01", "end_date": "2025-11-30",
+    })
+    assert response.status_code == 200
+    tables = response.json()["tables"]
+    for name in ("selected_sessions_by_month", "question_turns_by_month"):
+        cell = tables[name]["cells"][0]
+        assert cell["suppressed"] is True
+        assert cell["value"] is None
+        assert cell["numerator"] is None
+        assert cell["denominator"] is None
+        assert cell["baseline_available"] is False
+        assert cell["baseline_numerator"] is None
+        assert cell["difference"] is None
+
+
+def test_schema_indexes_issue_event_message_join_key(analytics_client):
+    conn = sqlite3.connect(analytics_client.app.state.db_path)
+    indexes = {row[1] for row in conn.execute("PRAGMA index_list(issue_events)")}
+    conn.close()
+    assert "idx_issue_events_message_id" in indexes
+
+
+def test_matrix_has_allowlisted_dimensions_and_keeps_unknown_categories(analytics_client):
+    response = analytics_client.get("/api/demo/matrix", params={"pair": "topic_code:region"})
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["endpoint"] == "matrix"
+    assert payload["matrix_pair"] == {"row": "topic_code", "column": "region"}
+    table = payload["tables"]["matrix"]
+    assert table["unit"] == "sessions_per_1000_row_sessions"
+    assert any(cell["dimensions"].get("topic_code") == "unknown_unclassified" for cell in table["cells"])
+    assert any(cell["dimensions"].get("region") == "unknown" for cell in table["cells"])
+    assert all("session_id" not in cell["dimensions"] for cell in table["cells"])
+
+
+@pytest.mark.parametrize(
+    "pair",
+    ["service_code:region", "topic_code:insurer_id", "region:location_basis"],
+)
+def test_matrix_accepts_each_other_allowlisted_pair(analytics_client, pair):
+    response = analytics_client.get("/api/demo/matrix", params={"pair": pair})
+
+    assert response.status_code == 200
+    assert response.json()["matrix_pair"] == {
+        "row": pair.split(":")[0],
+        "column": pair.split(":")[1],
+    }
+
+
+def test_topic_session_table_shows_cohort_denominator_without_normalizing_count(analytics_client):
+    conn = sqlite3.connect(analytics_client.app.state.db_path)
+    conn.executemany(
+        "INSERT INTO issue_events VALUES (?, ?, ?, ?, ?, ?, ?)",
+        [
+            (f"event-test-extra-{index:02d}", f"message-test-{index:02d}",
+             "coverage_waiting_period", "gp", "waiting_period", "resolved", "demo-topic-taxonomy-v1")
+            for index in (0, 1, 3, 4, 5, 6, 7, 9)
+        ],
+    )
+    conn.commit()
+    conn.close()
+
+    payload = analytics_client.get(
+        "/api/demo/overview", params={"topic_code": "coverage_waiting_period"}
+    ).json()
+    selected_sessions = payload["tables"]["selected_sessions"]["cells"][0]
+    topic_cell = payload["tables"]["topic_sessions"]["cells"][0]
+
+    assert selected_sessions["numerator"] == 18
+    assert topic_cell["suppressed"] is False
+    assert topic_cell["numerator"] == 11
+    assert topic_cell["value"] == 11
+    assert topic_cell["denominator"] == selected_sessions["numerator"]
+    assert "denominator is selected cohort sessions" in payload["tables"]["topic_sessions"]["caveat"]
+
+    for path in ("/api/demo/topics", "/api/demo/coverage-friction"):
+        shared_payload = analytics_client.get(
+            path, params={"topic_code": "coverage_waiting_period"}
+        ).json()
+        shared_cell = shared_payload["tables"]["topic_sessions"]["cells"][0]
+        assert shared_cell["numerator"] == shared_cell["value"] == 11
+        assert shared_cell["denominator"] == 18
+
+
+@pytest.mark.parametrize("pair", [None, "topic_code", "topic_code:topic_code", "session_id:region",
+                                  "region:location_basis:topic_code", "topic_code:"])
+def test_matrix_rejects_missing_or_invalid_pairs(analytics_client, pair):
+    params = {} if pair is None else {"pair": pair}
+    assert analytics_client.get("/api/demo/matrix", params=params).status_code == 422
+
+
+def test_matrix_rejects_duplicate_pair_and_unknown_query_parameters(analytics_client):
+    duplicate = analytics_client.get("/api/demo/matrix?pair=topic_code:region&pair=service_code:region")
+    unknown = analytics_client.get("/api/demo/matrix", params={"pair": "topic_code:region", "raw": "1"})
+
+    assert duplicate.status_code == 422
+    assert unknown.status_code == 422
 
 
 def test_unsupported_time_bucket_returns_422(analytics_client):
