@@ -19,8 +19,8 @@ SOURCES_DIR = DATA_DIR / "sources"
 CLINICS_SOURCE_PATH = SOURCES_DIR / "clinics_qld.csv"
 
 # Raw structured data → SQLite ingest only
-MBS_XML_PATH = KNOWLEDGE_DIR / "data" / "MBS-XML-20260301-version 2.XML"
-IMAP_PATH    = KNOWLEDGE_DIR / "data" / "20260301_MBSONLINE_IMAP.TXT"
+MBS_XML_PATH = KNOWLEDGE_DIR / "data" / "MBS-current.XML"
+IMAP_PATH    = KNOWLEDGE_DIR / "data" / "MBSONLINE_IMAP-current.TXT"
 
 # Government PDFs → ChromaDB oshc_rules collection
 DEED_PDF_PATH          = KNOWLEDGE_DIR / "documents" / "deed-for-the-provision-of-overseas-student-health-cover-1-july-2025.pdf"
